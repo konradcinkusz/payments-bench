@@ -1,0 +1,26 @@
+# gitleaks configuration - payments-bench
+#
+# Runs in two places, deliberately (P5; repo-baseline section 2):
+#   - pre-commit hook (scripts/hooks/pre-commit)       catches the mistake before it is history;
+#   - CI job (.github/workflows/secret-scan.yml)       catches contributors without hooks.
+#
+# If a secret ever lands here: ROTATE FIRST, clean history second. A pushed commit is
+# disclosed the moment it is pushed; scrubbing without rotating is theatre.
+
+title = "payments-bench secret scanning"
+
+[extend]
+# The upstream provider rules (cloud, source hosts, payment providers, ...). This repository
+# holds no real credentials and talks to no real bank (the partner is simulated), so there
+# is no bespoke variable shape to match. A secret introduced later gets its detection rule
+# in the same commit that introduces it.
+useDefault = true
+
+[allowlist]
+description = "Documentation about credential handling, and the committed example file"
+# Scoped to paths, not to value regexes: allowlisting by pattern is how a real credential
+# eventually gets waved through by a rule written for a fake one.
+paths = [
+  # Placeholder-only file documenting every variable; it must never hold a real value.
+  '''(^|/)secrets\.env\.example$''',
+]

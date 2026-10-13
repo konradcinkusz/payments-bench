@@ -1,0 +1,38 @@
+name: Lint
+
+# actionlint over the workflows (repo-baseline section 1: CI runs the linters the repo claims).
+# Local mirror: download the same release and run `actionlint` from the repository root.
+#
+# markdownlint is not configured here: stream C owns the Markdown documents and runs
+# markdownlint in the lint-docs job of ci.yml with its own .markdownlint.jsonc.
+
+on:
+  pull_request:
+    branches: [main]
+    paths: ['.github/workflows/**']
+  push:
+    branches: [main]
+    paths: ['.github/workflows/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Run actionlint
+        env:
+          # Pinned release. Bump together with the version in scripts/README.md.
+          ACTIONLINT_VERSION: '1.7.12'
+        run: |
+          set -euo pipefail
+          dir="$(mktemp -d)"
+          curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+            | tar -xz -C "$dir" actionlint
+          "$dir/actionlint" -color
