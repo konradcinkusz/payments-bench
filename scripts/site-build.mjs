@@ -62,10 +62,13 @@ function loadStatus() {
     }
   };
   walk(status, []);
-  for (const key of ['repository', 'tests.domain', 'tests.application', 'mergedPullRequests']) {
+  for (const key of ['repository', 'mergedPullRequests']) {
     if (!facts.has(key)) fail(`status.json: required fact "${key}" is missing`);
   }
-  for (const key of ['tests.domain', 'tests.application']) {
+  // Every key under "tests" is one test project: { value, source, asOf }. A new project needs no code change here.
+  const testKeys = [...facts.keys()].filter((key) => key.startsWith('tests.'));
+  if (testKeys.length === 0) fail('status.json: "tests" needs at least one test project');
+  for (const key of testKeys) {
     if (!Number.isInteger(facts.get(key).value) || facts.get(key).value < 0) fail(`status.json: "${key}" must be a non-negative integer`);
   }
   if (!/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+$/.test(facts.get('repository').value)) fail('status.json: "repository" must be a https://github.com/<owner>/<repo> URL');
@@ -278,7 +281,10 @@ function build() {
   const hasPdfWorkflow = existsSync(rel('.github/workflows/build-overview-pdf.yml'));
   const css = read('docs/site/style.css').trimEnd();
 
-  const testsTotal = facts.get('tests.domain').value + facts.get('tests.application').value + (facts.get('tests.api')?.value ?? 0);
+  const testFacts = [...facts].filter(([key]) => key.startsWith('tests.')).map(([, fact]) => fact);
+  const testsTotal = testFacts.reduce((sum, fact) => sum + fact.value, 0);
+  const testsCaption = testFacts.map((fact) => `${fact.value} in ${fact.source}`).join(' + ');
+  const testsAsOf = testFacts.map((fact) => fact.asOf).sort().at(-1);
   const asOfDates = [...facts.values()].map((f) => f.asOf).sort();
   const prs = facts.get('mergedPullRequests').value;
 
@@ -296,6 +302,8 @@ function build() {
     documents: documentsHtml(adrs, hasPdfWorkflow),
     'merged-prs': `<ul class="plain">${prs.map((pr) => `<li><a href="${esc(repo)}/pull/${pr.number}">#${pr.number}</a> ${esc(pr.title)}</li>`).join('')}</ul>`,
     'tests-total': esc(testsTotal),
+    'tests-caption': esc(testsCaption),
+    'tests-as-of': esc(testsAsOf),
     'count:scenarios': esc(scenarios.length),
     'count:register-open': esc(register.open.length),
     'count:register-closed': esc(register.closedRows.length),
