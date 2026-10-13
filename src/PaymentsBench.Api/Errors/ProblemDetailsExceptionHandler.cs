@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using PaymentsBench.Application.Payments;
+using PaymentsBench.Application.Ports;
 using PaymentsBench.Domain;
 using PaymentsBench.Domain.Payments;
 
@@ -21,6 +22,7 @@ public sealed partial class ProblemDetailsExceptionHandler(IProblemDetailsServic
             PaymentNotFoundException e => (StatusCodes.Status404NotFound, "Payment not found", e.Message),
             IdempotencyConflictException e => (StatusCodes.Status409Conflict, "Idempotency conflict", e.Message),
             InvalidTransitionException e => (StatusCodes.Status409Conflict, "Invalid transition", e.Message),
+            ConcurrencyConflictException e => (StatusCodes.Status409Conflict, "Concurrent modification", e.Message),
             DomainException e => (StatusCodes.Status422UnprocessableEntity, "Request cannot be processed", e.Message),
             BadHttpRequestException e => (e.StatusCode, "Bad request", "The request could not be read."),
             _ => (StatusCodes.Status500InternalServerError, "Internal server error", "An unexpected error occurred."),

@@ -36,7 +36,7 @@ public sealed class UnitOfWorkTests(MigratedPostgresFixture database) : IClassFi
         {
             await Stage(write, first);
             await Stage(write, clashing);
-            await Assert.ThrowsAsync<DbUpdateException>(() => new EfUnitOfWork(write).CommitAsync(CancellationToken.None));
+            await Assert.ThrowsAsync<PaymentsBench.Application.Ports.ConcurrencyConflictException>(() => new EfUnitOfWork(write).CommitAsync(CancellationToken.None));
         }
 
         foreach (var payment in new[] { first, clashing })
