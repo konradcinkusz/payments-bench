@@ -1,0 +1,21 @@
+flowchart TB
+    subgraph APPHOST["PaymentsBench.AppHost (Aspire composition root)"]
+        PG[("postgres<br/>AddPostgres with data volume<br/>database: payments")]
+        PART["partner<br/>PaymentsBench.PartnerSimulator<br/>partner simulator (simulated bank)"]
+        API["api<br/>PaymentsBench.Api<br/>Partner__BaseAddress=http://partner"]
+        DASH["Aspire dashboard<br/>traces, metrics, logs over OTLP"]
+    end
+
+    API -- "ConnectionStrings:payments<br/>WithReference, WaitFor" --> PG
+    API -- "HTTP: /transfers, /statements<br/>WithReference, WaitFor" --> PART
+    API -. "OTLP" .-> DASH
+    PART -. "OTLP" .-> DASH
+    CLI["client, curl"] --> API
+    CLI -- "PUT /faults, settle, return" --> PART
+
+    subgraph DEG["Degraded mode: no payments connection string"]
+        direction TB
+        APID["api, run alone with dotnet run<br/>in-memory repository, ledger, outbox, inbox<br/>no migration, no OutboxDispatcher<br/>warning in the log at start-up"]
+        PARTD["partner simulator (simulated bank)<br/>dotnet run, port 5101"]
+        APID -- "HTTP, port 5100 to 5101" --> PARTD
+    end

@@ -1,0 +1,32 @@
+flowchart TB
+    subgraph W["Write side: one CommitAsync per state change"]
+        H["handler<br/>Initiate, Submit, Resolve, ApplyPartnerNotification"]
+        C["IUnitOfWork.CommitAsync<br/>payment row, journal entry and outbox row<br/>in the same commit"]
+        H --> C
+        C --> OB[("outbox table<br/>IOutbox.EnqueueAsync<br/>DispatchedAt is null")]
+    end
+
+    subgraph D["OutboxDispatcher (PostgreSQL mode only)"]
+        POLL["every 2 s: take up to 100 undispatched<br/>messages, oldest OccurredAt first"]
+        PUB["IEventPublisher.PublishAsync"]
+        MARK["set DispatchedAt, SaveChangesAsync"]
+        POLL --> PUB --> MARK
+    end
+
+    OB --> POLL
+    PUB --> LOG["LoggingEventPublisher: a log line today<br/>no broker wired, register R5"]
+    MARK -. "a crash before this line<br/>republishes the message:<br/>at least once" .-> POLL
+
+    subgraph I["Read side: POST /partner/notifications"]
+        N["PartnerNotification<br/>NotificationId, EndToEndId, Kind"]
+        T{"IInbox.TryRecordAsync<br/>NotificationId"}
+        F{"payment found by<br/>end-to-end id?"}
+        APPLY["Applied: Settled, Rejected or Returned<br/>state change, posting, outbox row, one commit"]
+        N --> T
+        T -- "false" --> DUP["Duplicate: nothing applied"]
+        T -- "true" --> F
+        F -- "no" --> UNK["UnknownPayment: id recorded, then commit"]
+        F -- "yes" --> APPLY
+    end
+
+    APPLY --> C

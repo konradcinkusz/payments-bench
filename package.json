@@ -9,9 +9,11 @@
     "node": ">=20"
   },
   "scripts": {
-    "lint": "npm run lint:md && npm run lint:links",
+    "lint": "npm run lint:md && npm run lint:links && npm run lint:diagrams",
     "lint:md": "markdownlint-cli2",
-    "lint:links": "node scripts/check-links.mjs"
+    "lint:links": "node scripts/check-links.mjs",
+    "lint:diagrams": "node scripts/check-diagrams.mjs",
+    "render:diagrams": "node scripts/render-diagrams.mjs"
   },
   "devDependencies": {
     "@mermaid-js/mermaid-cli": "11.16.0",
