@@ -9,6 +9,7 @@ using PaymentsBench.Infrastructure.InMemory;
 using PaymentsBench.Infrastructure.Outbox;
 using PaymentsBench.Infrastructure.Partner;
 using PaymentsBench.Infrastructure.Persistence;
+using PaymentsBench.Infrastructure.Schemes;
 
 namespace PaymentsBench.Infrastructure;
 
@@ -16,6 +17,7 @@ public static class InfrastructureRegistration
 {
     public const string PaymentsConnectionName = "payments";
     public const string PartnerClientName = "partner";
+    public const string SchemesDirectoryKey = "Schemes:Directory";
 
     /// <summary>
     /// Wires the ports. With a connection string named <c>payments</c> the stores are PostgreSQL
@@ -30,6 +32,12 @@ public static class InfrastructureRegistration
         services.AddScoped<ResolveSubmittedPaymentHandler>();
         services.AddScoped<ApplyPartnerNotificationHandler>();
         services.AddScoped<ReconciliationService>();
+
+        // Scheme data is required, so it loads here and a bad file stops start-up with its name (P5, P8).
+        var schemesDirectory = configuration[SchemesDirectoryKey] is { Length: > 0 } configured
+            ? Path.GetFullPath(configured)
+            : Path.Combine(AppContext.BaseDirectory, "scenarios");
+        services.AddSingleton<ISchemeCatalog>(SchemeCatalogLoader.Load(schemesDirectory));
 
         var connectionString = configuration.GetConnectionString(PaymentsConnectionName);
         if (string.IsNullOrWhiteSpace(connectionString))

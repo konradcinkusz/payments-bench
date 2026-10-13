@@ -4,12 +4,15 @@ using PaymentsBench.Application.Ports;
 using PaymentsBench.Domain.Ledger;
 using PaymentsBench.Domain.Payments;
 using PaymentsBench.Infrastructure.Persistence;
+using PaymentsBench.Infrastructure.Schemes;
 
 namespace PaymentsBench.Integration.Tests;
 
 /// <summary>The application handlers on the EF Core stores, one scoped context per call as in the API. The partner is simulated.</summary>
 public sealed class HandlerTests(MigratedPostgresFixture database) : IClassFixture<MigratedPostgresFixture>
 {
+    private static readonly ISchemeCatalog Schemes = SchemeCatalogLoader.Load(Path.Combine(AppContext.BaseDirectory, "scenarios"));
+
     private readonly FixedClock _clock = new(Samples.Start);
 
     [Fact]
@@ -74,7 +77,7 @@ public sealed class HandlerTests(MigratedPostgresFixture database) : IClassFixtu
     private async Task<Payment> Initiate(string name, decimal amount)
     {
         await using var db = database.CreateContext();
-        var handler = new InitiatePaymentHandler(new EfPaymentRepository(db), new EfLedger(db), new EfOutbox(db), new EfUnitOfWork(db), _clock);
+        var handler = new InitiatePaymentHandler(new EfPaymentRepository(db), new EfLedger(db), new EfOutbox(db), new EfUnitOfWork(db), _clock, Schemes);
         return await handler.HandleAsync(
             new InitiatePayment(KeyFor(name), EndToEndFor(name), amount, "EUR", "DE89370400440532013000", "GB33BUKB20201555555555", "sepa"),
             CancellationToken.None);

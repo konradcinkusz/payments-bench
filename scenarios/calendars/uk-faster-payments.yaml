@@ -1,0 +1,16 @@
+# Faster Payments Service (UK) business calendar.
+#
+# Source: Pay.UK, Faster Payments. The service runs 24 hours a day, every day of the year,
+# including weekends and bank holidays; it is not tied to the CHAPS or bank-holiday calendar.
+# https://www.wearepay.uk/what-we-do/payment-systems/faster-payments/
+#
+# So this calendar is modelled with weekends open and no closing days. That is a statement about
+# the scheme, not an empty placeholder: with cut-off 23:59 and no settlement days, a payment
+# submitted on any day of the covered range has that day as its value date. (Individual
+# banks may apply their own limits or maintenance windows; this simulated bench does not.)
+# A date outside the covered range is an error, never a guess.
+name: uk-faster-payments
+weekendsClosed: false
+coveredFrom: 2026-01-01
+coveredTo: 2027-12-31
+closingDays: []

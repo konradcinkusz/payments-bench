@@ -13,6 +13,9 @@
     <ProjectReference Include="..\..\src\PaymentsBench.Infrastructure\PaymentsBench.Infrastructure.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="..\..\scenarios\**\*.yaml" Link="scenarios\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
 </Project>
