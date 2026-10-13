@@ -11,7 +11,9 @@
   "scripts": {
     "lint": "npm run lint:md && npm run lint:links",
     "lint:md": "markdownlint-cli2",
-    "lint:links": "node scripts/check-links.mjs"
+    "lint:links": "node scripts/check-links.mjs",
+    "site:build": "node scripts/site-build.mjs",
+    "site:check": "node scripts/site-build.mjs --check"
   },
   "devDependencies": {
     "@mermaid-js/mermaid-cli": "11.16.0",
