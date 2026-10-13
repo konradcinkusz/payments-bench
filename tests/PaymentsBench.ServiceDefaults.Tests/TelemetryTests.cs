@@ -56,6 +56,17 @@ public sealed class TelemetryTests
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/metrics")).StatusCode);
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("nonsense")]
+    public async Task An_empty_or_unparseable_switch_means_off_not_a_failed_start(string value)
+    {
+        var (app, client, _) = await StartAsync(new() { ["Metrics:Prometheus:Enabled"] = value });
+        await using var _a = app;
+
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/metrics")).StatusCode);
+    }
+
     [Fact]
     public async Task Metrics_endpoint_serves_prometheus_text_when_the_switch_is_on()
     {

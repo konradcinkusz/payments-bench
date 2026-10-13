@@ -103,7 +103,8 @@ public static class Extensions
 
     /// <summary><c>Metrics:Prometheus:Enabled</c>, default off (env var <c>Metrics__Prometheus__Enabled</c>).</summary>
     private static bool PrometheusEnabled(IConfiguration configuration) =>
-        configuration.GetValue<bool>("Metrics:Prometheus:Enabled");
+        // An empty or unparseable value (an unset compose variable) means off, not a failed start-up.
+        bool.TryParse(configuration["Metrics:Prometheus:Enabled"], out var enabled) && enabled;
 
     private static bool IsOperationalPath(PathString path) =>
         path.StartsWithSegments("/health") || path.StartsWithSegments("/alive") || path.StartsWithSegments(MetricsPath);
