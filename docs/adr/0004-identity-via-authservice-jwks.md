@@ -20,17 +20,17 @@ this estate. It signs RS256 and publishes `/.well-known/openid-configuration` an
    `ValidAlgorithms = [RS256]`. `RequireHttpsMetadata` is true outside Development. Issuer and
    audience are required whenever an authority is set; they are product-specific so a token minted
    for another product on the same authservice is refused.
-2. **Fallback policy = authenticated user.** Every endpoint needs a bearer token unless it says
+1. **Fallback policy = authenticated user.** Every endpoint needs a bearer token unless it says
    otherwise. `/health` and `/alive` are anonymous; OpenAPI is anonymous in Development only.
    `/partner/notifications` falls under the fallback policy (see R11).
-3. **No `Auth:Authority`:**
+1. **No `Auth:Authority`:**
    - Development logs a warning (`auth: development-policy (anonymous allowed)`) and allows
      anonymous requests, so `dotnet run` and the CI container smoke test need no identity service.
    - Any other environment fails startup with a message naming `Auth__Authority`.
-4. **The AppHost** declares authservice from the pinned image with its own PostgreSQL database and
+1. **The AppHost** declares authservice from the pinned image with its own PostgreSQL database and
    a secret `auth-signing-key` parameter, and hands the API `Auth__Authority`, only when that
    parameter is configured. Otherwise it starts as before and says so.
-5. The simulated partner stays open; authentication is not added to it.
+1. The simulated partner stays open; authentication is not added to it.
 
 ## Why this deviates from P8 outside Development
 
