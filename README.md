@@ -1,7 +1,17 @@
 # payments-bench
 
+[![Ask Me Anything](https://flat.badgen.net/static/Ask%20me/anything?icon=github&color=black&scale=1.01)](https://github.com/konradcinkusz "Ask Me Anything")
 [![License](https://flat.badgen.net/github/license/konradcinkusz/payments-bench?icon=github&color=black&scale=1.01)](https://github.com/konradcinkusz/payments-bench/blob/main/LICENSE "License")
-[![CI](https://github.com/konradcinkusz/payments-bench/actions/workflows/ci.yml/badge.svg)](https://github.com/konradcinkusz/payments-bench/actions/workflows/ci.yml "CI")
+[![Maintained](https://flat.badgen.net/static/Maintained/yes?icon=github&color=black&scale=1.01)](https://github.com/konradcinkusz/payments-bench/commits/main "Maintained")
+[![Branches](https://flat.badgen.net/github/branches/konradcinkusz/payments-bench?icon=github&color=black&scale=1.01)](https://github.com/konradcinkusz/payments-bench/branches "Branches")
+[![Commits](https://flat.badgen.net/github/commits/konradcinkusz/payments-bench?icon=github&color=black&scale=1.01)](https://github.com/konradcinkusz/payments-bench/commits "Commits")
+[![Issues](https://flat.badgen.net/github/issues/konradcinkusz/payments-bench?icon=github&color=black&scale=1.01)](https://github.com/konradcinkusz/payments-bench/issues "Issues")
+[![Pull requests](https://flat.badgen.net/github/prs/konradcinkusz/payments-bench?icon=github&color=black&scale=1.01)](https://github.com/konradcinkusz/payments-bench/pulls "Pull requests")
+[![CI](https://github.com/konradcinkusz/payments-bench/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/konradcinkusz/payments-bench/actions/workflows/ci.yml "CI")
+[![Containers](https://github.com/konradcinkusz/payments-bench/actions/workflows/containers.yml/badge.svg?branch=main)](https://github.com/konradcinkusz/payments-bench/actions/workflows/containers.yml "Containers")
+[![CodeQL](https://github.com/konradcinkusz/payments-bench/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/konradcinkusz/payments-bench/actions/workflows/codeql.yml "CodeQL")
+[![Secret Scan](https://github.com/konradcinkusz/payments-bench/actions/workflows/secret-scan.yml/badge.svg?branch=main)](https://github.com/konradcinkusz/payments-bench/actions/workflows/secret-scan.yml "Secret Scan")
+[![Lint](https://github.com/konradcinkusz/payments-bench/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/konradcinkusz/payments-bench/actions/workflows/lint.yml "Lint")
 [![Build Overview PDF](https://github.com/konradcinkusz/payments-bench/actions/workflows/build-overview-pdf.yml/badge.svg)](https://github.com/konradcinkusz/payments-bench/actions/workflows/build-overview-pdf.yml "Build Overview PDF")
 
 An outbound bank-transfer service, built to show the mechanisms a payment rail needs in order to
