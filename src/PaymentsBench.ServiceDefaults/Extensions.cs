@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -23,6 +24,7 @@ public static class Extensions
         where TBuilder : IHostApplicationBuilder
     {
         builder.ConfigureOpenTelemetry();
+        builder.ConfigureRequestLimits();
         builder.AddDefaultHealthChecks();
         builder.Services.AddServiceDiscovery();
         builder.Services.ConfigureHttpClientDefaults(http =>
@@ -31,6 +33,28 @@ public static class Extensions
         });
         return builder;
     }
+
+    /// <summary>
+    /// Kestrel's default request body limit is 30 MB, thirty thousand times what any body here needs
+    /// (the largest is a payment initiation of a few hundred bytes). An authenticated caller could
+    /// otherwise make each request buffer megabytes on a 256 to 512 MB machine (SEC-07). The cap is
+    /// <c>Limits:MaxRequestBodyBytes</c>, default 64 KiB; the <c>Server</c> response header is dropped.
+    /// </summary>
+    public static TBuilder ConfigureRequestLimits<TBuilder>(this TBuilder builder)
+        where TBuilder : IHostApplicationBuilder
+    {
+        var maxBodyBytes = long.TryParse(builder.Configuration["Limits:MaxRequestBodyBytes"], out var configured) && configured > 0
+            ? configured
+            : DefaultMaxRequestBodyBytes;
+        builder.Services.Configure<KestrelServerOptions>(kestrel =>
+        {
+            kestrel.Limits.MaxRequestBodySize = maxBodyBytes;
+            kestrel.AddServerHeader = false;
+        });
+        return builder;
+    }
+
+    public const long DefaultMaxRequestBodyBytes = 64 * 1024;
 
     public static TBuilder ConfigureOpenTelemetry<TBuilder>(this TBuilder builder)
         where TBuilder : IHostApplicationBuilder

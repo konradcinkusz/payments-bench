@@ -125,7 +125,7 @@ public sealed class ScenarioHost : IAsyncDisposable
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
-            // Development with no Auth:Authority: the API allows anonymous calls (ADR 0008).
+            // Development with no Auth:Authority: the API allows anonymous calls (ADR 0015).
             builder.UseEnvironment("Development");
             // UseSetting, not ConfigureAppConfiguration: Program.cs reads these while it builds the
             // services, before a configuration callback would apply.

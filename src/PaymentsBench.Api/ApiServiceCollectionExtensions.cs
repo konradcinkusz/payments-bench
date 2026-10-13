@@ -35,9 +35,12 @@ public static class ApiServiceCollectionExtensions
         app.MapOpenApi().AllowAnonymousInDevelopment(app.Environment);
         app.MapPaymentsEndpoints();
         app.MapPain001Endpoints();
-        app.MapPartnerNotificationEndpoints();
-        app.MapReconciliationEndpoints();
-        app.MapLedgerEndpoints();
+
+        // What is not "any authenticated caller" is declared here, as groups around the endpoint maps,
+        // so the endpoint files stay free of identity concerns (SEC-02, SEC-04).
+        app.MapGroup(string.Empty).RequireAuthorization(AuthorizationPolicies.PartnerNotifications).MapPartnerNotificationEndpoints();
+        app.MapGroup(string.Empty).RequireAuthorization(AuthorizationPolicies.Operations).MapReconciliationEndpoints();
+        app.MapGroup(string.Empty).RequireAuthorization(AuthorizationPolicies.Operations).MapLedgerEndpoints();
         return app;
     }
 }

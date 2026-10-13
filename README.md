@@ -83,6 +83,7 @@ dotnet run --project src/PaymentsBench.Api                # http://localhost:510
 
 Every endpoint except `/health` and `/alive` needs a bearer token from authservice (`Auth__Authority`, `Auth__Issuer`, `Auth__Audience`); add `-H "Authorization: Bearer $TOKEN"` to the calls below.
 In Development with no `Auth__Authority` the API logs a warning and allows anonymous calls, so the calls below work as written; any other environment refuses to start without it.
+`/partner/notifications` needs a token carrying the `payments.partner.notify` grant, and the ledger and reconciliation routes the `payments.operate` grant (403 without it; both are open in the Development policy). See [`SECURITY.md`](SECURITY.md) and the [security review](docs/security/SECURITY-REVIEW.md).
 
 Then walk a transfer through its life:
 
