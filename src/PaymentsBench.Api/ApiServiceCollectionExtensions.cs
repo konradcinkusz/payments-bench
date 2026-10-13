@@ -3,6 +3,7 @@ using System.Diagnostics.Metrics;
 using System.Text.Json.Serialization;
 using PaymentsBench.Api.Endpoints;
 using PaymentsBench.Api.Errors;
+using PaymentsBench.Api.Identity;
 
 namespace PaymentsBench.Api;
 
@@ -31,7 +32,7 @@ public static class ApiServiceCollectionExtensions
     {
         app.UseExceptionHandler();
         app.UseStatusCodePages();
-        app.MapOpenApi();
+        app.MapOpenApi().AllowAnonymousInDevelopment(app.Environment);
         app.MapPaymentsEndpoints();
         app.MapPartnerNotificationEndpoints();
         app.MapReconciliationEndpoints();

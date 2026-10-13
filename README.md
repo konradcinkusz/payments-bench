@@ -32,7 +32,7 @@ Each figure names the file it was measured in; the measurements were taken on `m
 
 | | | |
 |---|---|---|
-| **The tests** | 98 · 30 + 42 + 26 | `dotnet test`: 30 in `tests/PaymentsBench.Domain.Tests`, 42 in `tests/PaymentsBench.Application.Tests` (in-memory stores), 26 in `tests/PaymentsBench.Integration.Tests` (real PostgreSQL). |
+| **The tests** | 110 · 30 + 42 + 26 + 12 | `dotnet test`: 30 in `tests/PaymentsBench.Domain.Tests`, 42 in `tests/PaymentsBench.Application.Tests` (in-memory stores), 26 in `tests/PaymentsBench.Integration.Tests` (real PostgreSQL), 12 in `tests/PaymentsBench.Api.Tests` (in-memory stores, no database). |
 | **The scenarios** | 7 files · 4 classes | [`scenarios/`](scenarios/) holds seven scenario files in the classes `happy`, `partner-failure`, `duplicate` and `reconciliation`. They are a specification; none is executed yet (R3). |
 | **The register** | 10 open rows | [`docs/REGISTER.md`](docs/REGISTER.md): R1 to R10, none closed. |
 | **The findings** | 5 | [`docs/FINDINGS.md`](docs/FINDINGS.md): F-1 and F-2 fixed, F-3 to F-5 open. |
@@ -41,7 +41,7 @@ Each figure names the file it was measured in; the measurements were taken on `m
 ## Run it
 
 ```bash
-dotnet test                                   # 130 tests; the 31 integration tests need PostgreSQL (see below)
+dotnet test                                   # 142 tests; the 31 integration tests need PostgreSQL (see below)
 dotnet run --project src/PaymentsBench.AppHost   # Aspire: PostgreSQL + simulator + API + dashboard
 ```
 
@@ -57,6 +57,9 @@ Or without Aspire, in memory, two terminals:
 dotnet run --project src/PaymentsBench.PartnerSimulator   # http://localhost:5101
 dotnet run --project src/PaymentsBench.Api                # http://localhost:5100
 ```
+
+Every endpoint except `/health` and `/alive` needs a bearer token from authservice (`Auth__Authority`, `Auth__Issuer`, `Auth__Audience`); add `-H "Authorization: Bearer $TOKEN"` to the calls below.
+In Development with no `Auth__Authority` the API logs a warning and allows anonymous calls, so the calls below work as written; any other environment refuses to start without it.
 
 Then walk a transfer through its life:
 
@@ -96,7 +99,7 @@ curl localhost:5100/payments/<id>/ledger
 ## What is built, and what has never run
 
 Built, tested and on `main`: the domain, the application handlers, the in-memory and EF Core
-stores, the HTTP surface, the partner simulator with switchable faults, and the 98 tests above.
+stores, the HTTP surface, the partner simulator with switchable faults, and the 110 tests above.
 
 Never run, recorded in [`docs/REGISTER.md`](docs/REGISTER.md) rather than in a footnote:
 

@@ -269,12 +269,12 @@ figure.fig figcaption { font-size: 13.5px; color: var(--muted); padding: 6px 4px
 <p class="note"><strong>The partner bank is simulated.</strong> Nothing in this repository has talked to a real bank. The partner is <code>src/PaymentsBench.PartnerSimulator</code>, and its API shape is invented (register row R1, below).</p>
 
 <div class="stat-row">
-<div class="stat"><span class="big-num">130</span><p>tests</p><span class="src">30 in tests/PaymentsBench.Domain.Tests + 42 in tests/PaymentsBench.Application.Tests + 31 in tests/PaymentsBench.Integration.Tests + 27 in tests/PaymentsBench.Api.Tests · as of 2026-10-13</span></div>
+<div class="stat"><span class="big-num">142</span><p>tests</p><span class="src">30 in tests/PaymentsBench.Domain.Tests + 42 in tests/PaymentsBench.Application.Tests + 31 in tests/PaymentsBench.Integration.Tests + 39 in tests/PaymentsBench.Api.Tests · as of 2026-10-13</span></div>
 <div class="stat"><span class="big-num">6</span><p>payment states, every allowed move in one table</p><span class="src">src/PaymentsBench.Domain/Payments/PaymentTransitions.cs</span></div>
 <div class="stat"><span class="big-num">3</span><p>ledger accounts</p><span class="src">src/PaymentsBench.Domain/Ledger/LedgerAccounts.cs</span></div>
 <div class="stat"><span class="big-num">7</span><p>fault scenarios, as data</p><span class="src">scenarios/*.yaml</span></div>
-<div class="stat"><span class="big-num">10</span><p>open rows in the register of what is not proved</p><span class="src">docs/REGISTER.md</span></div>
-<div class="stat"><span class="big-num">9</span><p>decision records</p><span class="src">docs/adr/</span></div>
+<div class="stat"><span class="big-num">11</span><p>open rows in the register of what is not proved</p><span class="src">docs/REGISTER.md</span></div>
+<div class="stat"><span class="big-num">10</span><p>decision records</p><span class="src">docs/adr/</span></div>
 </div>
 
 <div class="cards cards-3">
@@ -546,8 +546,9 @@ figure.fig figcaption { font-size: 13.5px; color: var(--muted); padding: 6px 4px
 <tr><th scope="row" class="mono">R10</th><td class="mono nowrap">2026-10-13</td><td><strong>Sanctions, AML, limits: absent.</strong> The service moves any amount to any account.</td><td>Out of scope for the bench; stays open as a statement of scope.</td></tr>
 <tr><th scope="row" class="mono">R11</th><td class="mono nowrap">2026-10-13</td><td><strong>The computed value date is not stamped on the payment.</strong> <code>ValueDateCalculator</code> and the per-scheme <code>HolidayCalendar</code> exist and are tested, but nothing calls them at submit or acceptance; <code>Payment.ValueDate</code> is still set only when the partner reports settlement (or defaults to today&#39;s date). The calendars are proved; the value date a customer is shown at submission is not.</td><td><code>SubmitPaymentHandler</code> (or acceptance) computes the value date from the scheme&#39;s rules and calendar, stamps it on the payment (a domain and schema change), and a test pins it for a known closing day.</td></tr>
 <tr><th scope="row" class="mono">R12</th><td class="mono nowrap">2026-10-13</td><td><strong>The Testcontainers path of the integration fixture has not run, and concurrent migration is untested.</strong> CI and local runs use <code>PAYMENTSBENCH_TEST_POSTGRES</code>; the fallback that starts <code>postgres:16-alpine</code> through Docker was only seen failing loudly. Several instances migrating at once rely on EF Core&#39;s migration lock.</td><td>A run on a machine with Docker and no env var, and a test that starts two migrations against one database.</td></tr>
+<tr><th scope="row" class="mono">R13</th><td class="mono nowrap">2026-10-13</td><td><strong>The partner webhook is authenticated with a bearer token, not a partner signature.</strong> <code>/partner/notifications</code> falls under the API&#39;s fallback policy, so the sender needs a token from authservice; a real partner would sign the payload (HMAC) or present a client certificate (mTLS), and nothing here verifies either.</td><td>Partner notifications are verified by a partner-held key (signature or mTLS) and a test rejects an unsigned one.</td></tr>
 </tbody></table></div>
-<p class="src">docs/REGISTER.md · 10 open rows</p>
+<p class="src">docs/REGISTER.md · 11 open rows</p>
 <h3>Closed</h3>
 <div class="tbl-wrap"><table class="tbl"><tbody>
 <tr><td>R7</td><td>2026-10-13</td><td><strong>The business calendar was weekends only.</strong> No public holidays, no per-scheme calendar, no TARGET2 closing days.</td><td>Calendars are data under <code>scenarios/calendars/</code> (target2, uk-faster-payments, us-fedwire), loaded into <code>ISchemeCatalog</code> at start-up. <code>HolidayCalendarTests</code> (Christmas 2026 and Good Friday/Easter Monday 2026 move the SEPA value date; weekends closed; out-of-range dates throw <code>CalendarCoverageException</code>) and <code>SchemeCatalogTests</code> (real files load, every scheme resolves its calendar, Fedwire observed holidays, malformed or missing data names the file, unknown scheme and wrong currency refused). See ADR 0007.</td></tr>
@@ -560,7 +561,7 @@ figure.fig figcaption { font-size: 13.5px; color: var(--muted); padding: 6px 4px
 <h2>Run it</h2>
 <p class="lede">No bank is involved: the partner is the simulator. Without a <code>payments</code> connection string the service runs in memory and says so in its log.</p>
 <ol class="steps">
-<li><p>Run the tests. 130 tests.</p><pre class="code">dotnet test</pre><span class="src">README.md</span> <span class="src">30 in tests/PaymentsBench.Domain.Tests + 42 in tests/PaymentsBench.Application.Tests + 31 in tests/PaymentsBench.Integration.Tests + 27 in tests/PaymentsBench.Api.Tests · 2026-10-13</span></li>
+<li><p>Run the tests. 142 tests.</p><pre class="code">dotnet test</pre><span class="src">README.md</span> <span class="src">30 in tests/PaymentsBench.Domain.Tests + 42 in tests/PaymentsBench.Application.Tests + 31 in tests/PaymentsBench.Integration.Tests + 39 in tests/PaymentsBench.Api.Tests · 2026-10-13</span></li>
 <li><p>Start the simulated partner and the API, in two terminals.</p><pre class="code">dotnet run --project src/PaymentsBench.PartnerSimulator   # http://localhost:5101
 dotnet run --project src/PaymentsBench.Api                # http://localhost:5100</pre><p class="muted">Or, with Aspire (PostgreSQL, simulator, API, dashboard): <code>dotnet run --project src/PaymentsBench.AppHost</code></p></li>
 <li><p>Initiate and submit a transfer. The <code>Idempotency-Key</code> header is required.</p><pre class="code">curl -X POST localhost:5100/payments -H 'Content-Type: application/json' -H 'Idempotency-Key: demo-1' \
@@ -599,6 +600,7 @@ node scripts/site-build.mjs --check   # exits 1 if the committed page is stale</
 <li><a href="https://github.com/konradcinkusz/payments-bench/blob/main/docs/adr/0005-the-documentation-site-is-generated.md">ADR 0005: The documentation site is generated, not hand-maintained</a> <span class="muted">decision record</span></li>
 <li><a href="https://github.com/konradcinkusz/payments-bench/blob/main/docs/adr/0006-the-site-loads-no-external-resource.md">ADR 0006: The site loads no external resource</a> <span class="muted">decision record</span></li>
 <li><a href="https://github.com/konradcinkusz/payments-bench/blob/main/docs/adr/0007-business-calendars-are-dated-covered-data.md">ADR 0007: Business calendars are dated, covered data</a> <span class="muted">decision record</span></li>
+<li><a href="https://github.com/konradcinkusz/payments-bench/blob/main/docs/adr/0008-identity-via-authservice-jwks.md">ADR 0008: Identity via authservice JWKS; anonymous only in Development</a> <span class="muted">decision record</span></li>
 <li><a href="https://github.com/konradcinkusz/payments-bench/blob/main/docs/adr/0008-schema-migrated-by-a-hosted-service-behind-a-gate.md">ADR 0008: The schema is migrated by a hosted service behind a gate</a> <span class="muted">decision record</span></li>
 <li><a href="https://github.com/konradcinkusz/payments-bench/blob/main/docs/adr/0009-api-validation-and-errors.md">ADR 0009: Built-in validation, one exception handler, one problem body</a> <span class="muted">decision record</span></li>
 <li><a href="https://github.com/konradcinkusz/payments-bench">The GitHub repository</a></li>
