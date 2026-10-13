@@ -1,0 +1,514 @@
+% ============================================================================
+% payments-bench -- project overview, rendered to PDF.
+%
+% This is NOT a research paper under architecture-standards'
+% docs/research/00-RESEARCH-DOCUMENTATION.md. That standard governs studies
+% that answer a previously unknown question with evidence; this document is a
+% project overview for a reader who wants the whole shape of the repository in
+% one sitting. It \inputs the house preamble (house-preamble.tex, copied
+% unmodified from architecture-standards) purely for the house look, and
+% repurposes \paperstatus: it carries the document's kind and the state of the
+% project, not a draft/verified research marker.
+%
+% Source of truth: docs/OVERVIEW.md in this repository. This file is a curated
+% presentation of that document and introduces no fact it does not contain.
+% Nothing enforces that an edit to OVERVIEW.md reaches this file; that drift
+% is an accepted consequence (docs/plans/stream-c-docs.md), to be met with a
+% section-heading check if the two are ever found to disagree.
+%
+% The partner bank in every section is SIMULATED
+% (src/PaymentsBench.PartnerSimulator). Nothing here has talked to a real bank.
+%
+% Figures are the repository's own Mermaid sources (docs/diagrams/*.mmd),
+% rendered to vector PDF by `npm run render:diagrams` before this file is
+% compiled. ASCII-only source, so pdflatex is enough.
+%
+% Build (PDFs are build output -- never committed):
+%   npm ci && npm run render:diagrams
+%   cd docs/papers && latexmk -pdf payments-bench-overview.tex
+% Also built by .github/workflows/build-overview-pdf.yml: on demand, on pull
+% requests touching docs/papers/** or docs/diagrams/** (run artifact), and on
+% v* tags (attached to the GitHub Release as PaymentsBench_Overview.pdf).
+% ============================================================================
+\documentclass[11pt,a4paper]{article}
+
+\newcommand{\paperstatus}{PROJECT OVERVIEW}
+\newcommand{\headerleft}{payments-bench --- Project overview}
+\newcommand{\pdftitleline}{payments-bench: an outbound transfer service that moves money exactly once}
+\newcommand{\pdfauthorline}{payments-bench contributors}
+\input{house-preamble}
+
+% Added for this document (not in the house set): a long table that may break
+% across pages, and \texttt line breaking at the characters identifiers use.
+\usepackage{longtable}
+\usepackage[htt]{hyphenat}
+% Keep each figure inside the section that discusses it.
+\usepackage[section]{placeins}
+% Long identifiers in running text: allow looser lines rather than overfull ones.
+\setlength{\emergencystretch}{3em}
+
+\begin{document}
+
+\housetitle{payments-bench}{An outbound transfer service that moves money exactly once}{Project overview}{\url{https://github.com/konradcinkusz/payments-bench}}{presents docs/OVERVIEW.md}
+
+\begin{abstract}
+\noindent
+payments-bench is an outbound bank-transfer service built to show the mechanisms a payment rail
+needs to move money exactly once and to recover when the bank on the other end misbehaves:
+idempotent initiation, a six-state payment machine, a submit whose status is committed before the
+partner call and whose failures become an Unknown outcome that is never retried blind, a resolver
+that asks the partner before it acts, a transactional outbox and an inbox, a double-entry
+append-only ledger, and reconciliation that returns named breaks as a work queue. The bank is
+simulated; the mechanisms are real code with tests. 37 tests pass (\repopath{tests/}, counted by
+\texttt{dotnet test} on 2026-10-13). Five defects are recorded in the findings report, none of
+them caught by a unit test, and ten rows of the register say what has not been proved, the first
+being that nothing here has ever talked to a real bank.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+% ----------------------------------------------------------------------------
+\section{Executive summary}
+
+\finding{This is not a payments product. It is a bench for the mechanisms one depends on.}
+Moving money is easy to get almost right. A transfer request arrives, a row is written, a call
+goes to the bank, the bank says yes. Every one of those steps can happen twice, or half-happen, or
+happen with nobody hearing the answer, and in each case naive code either loses track of a
+customer's money or sends it twice. The repository builds the smallest service that handles those
+cases on purpose, and writes down in a register which of them it has proved and which it has not.
+
+What is on \texttt{main}:
+\begin{itemize}[leftmargin=1.4em]
+  \item an HTTP API (\repopath{src/PaymentsBench.Api/Program.cs}) to initiate, submit, resolve and
+        inspect a transfer, receive partner notifications, run reconciliation and read balances;
+  \item a six-state payment machine whose allowed moves are one table,
+        \repopath{PaymentTransitions};
+  \item idempotent initiation by \texttt{Idempotency-Key} plus a SHA-256 hash of the body;
+  \item a submit that commits \texttt{Submitted} before calling the partner and maps every
+        failure after the request may have left the process to an \textbf{Unknown} outcome;
+  \item a resolver that asks the partner by end-to-end id and resubmits only on
+        \texttt{NotFound};
+  \item a transactional outbox for events and an inbox that deduplicates notifications;
+  \item a double-entry, append-only ledger over \texttt{customer-funds},
+        \texttt{pending-outbound} and \texttt{nostro};
+  \item reconciliation of a day's statement against settled payments, as named breaks;
+  \item scheme rules as data in \repopath{scenarios/schemes.yaml};
+  \item a \textbf{simulated} partner bank with five fault profiles switched at runtime;
+  \item a degraded mode: without a database connection string every store is in memory and the
+        log says so.
+\end{itemize}
+
+The 37 tests run against in-memory stores and a scripted partner, which is exactly why the two
+most serious defects found so far were found by walking a transfer through the running services
+over HTTP instead (\finding{F-1}, \finding{F-2}; Section~\ref{sec:caught}).
+
+% ----------------------------------------------------------------------------
+\section{Why a payment rail is hard}
+
+Four properties make outbound payments harder than ordinary request handling, and each maps to a
+mechanism in the repository.
+
+\begin{description}[leftmargin=1.4em,style=nextline]
+  \item[Requests are repeated.] A client retries on a dropped connection, a queue redelivers, a
+        user double-clicks. Without a stable notion of ``the same request'' each repeat is a new
+        transfer. $\rightarrow$ idempotent initiation (Section~\ref{sec:idem}).
+  \item[The partner's answer can be lost after the partner acted.] From the caller's side, a
+        recorded transfer whose response was lost looks identical to a request that never
+        arrived. A retry is safe in one case and a duplicate in the other, and the caller cannot
+        tell which. $\rightarrow$ the Unknown outcome and the resolver
+        (Section~\ref{sec:unknown}).
+  \item[Delivery between systems is at least once.] Events and notifications can both arrive
+        twice. $\rightarrow$ outbox and inbox (Section~\ref{sec:outbox}).
+  \item[The money must be explainable afterwards.] ``Where is this customer's money right now''
+        must have one answer derived from history, and what the bank's statement says must be
+        compared with what the service believes. $\rightarrow$ the ledger
+        (Section~\ref{sec:ledger}) and reconciliation (Section~\ref{sec:recon}).
+\end{description}
+
+Underneath sits a duller property: the schemes that carry the money have cut-offs, settlement
+days and calendars that change independently of the code. $\rightarrow$ schemes as data
+(Section~\ref{sec:schemes}).
+
+% ----------------------------------------------------------------------------
+\section{The money path}
+
+Every movement of money is a balanced journal entry between three accounts. The postings for each
+payment event are in one file, \repopath{src/PaymentsBench.Domain/Ledger/Postings.cs}, so the path
+can be read top to bottom.
+
+\begin{center}
+\begin{tabular}{@{}llll@{}}
+\toprule
+Event & Posting & Debit & Credit \\
+\midrule
+Initiated & \texttt{Reserve} & \texttt{customer-funds} & \texttt{pending-outbound} \\
+Settled & \texttt{Settle} & \texttt{pending-outbound} & \texttt{nostro} \\
+Rejected (before settlement) & \texttt{Release} & \texttt{pending-outbound} & \texttt{customer-funds} \\
+Returned (after settlement) & \texttt{Reverse} & \texttt{nostro} & \texttt{customer-funds} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.82\linewidth,height=0.5\textheight,keepaspectratio]{\dgm{a1-money-path}}
+  \caption{The money path: which payment event posts which movement between the three ledger
+  accounts (\repopath{docs/diagrams/a1-money-path.mmd}).}
+\end{figure}
+
+Customer funds are reserved the moment a payment is initiated, sit in \texttt{pending-outbound}
+while the transfer is in flight, and leave through \texttt{nostro} only when the partner says the
+transfer settled. A rejection releases the reservation; a return reverses the settlement.
+\finding{After reserve, settle and reverse, the customer's money is back where it started and
+every account nets to zero}; the ledger test
+\texttt{The\_full\_money\_path\_of\_a\_returned\_payment\_nets\_to\_zero\_on\_customer\_funds\_and\_nostro}
+proves it.
+
+% ----------------------------------------------------------------------------
+\section{Architecture}
+
+Four projects carry the logic, in strict dependency order.
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}l l X@{}}
+\toprule
+Project & Knows & Holds \\
+\midrule
+\texttt{Domain} & nothing & \texttt{Money}, \texttt{Payment}, \texttt{PaymentTransitions}, \texttt{JournalEntry}, \texttt{Postings}, \texttt{SchemeRules}, \texttt{ValueDateCalculator} \\
+\texttt{Application} & domain, ports & the handlers (initiate, submit, resolve, apply notification), \texttt{ReconciliationService}, the ports \\
+\texttt{Infrastructure} & the ports & in-memory and EF Core/PostgreSQL stores, \texttt{OutboxDispatcher}, \texttt{HttpPartnerGateway}, \texttt{HttpStatementSource} \\
+\texttt{Api} & all of the above & the HTTP surface; \texttt{Program.cs} is the manifest \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Around them, \texttt{ServiceDefaults} carries OpenTelemetry, health and service discovery and by
+rule no domain type; \texttt{AppHost} is the Aspire composition root (one PostgreSQL with a
+\texttt{payments} database, the partner simulator, the API); \texttt{PartnerSimulator} is the
+simulated bank.
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.82\linewidth,height=0.5\textheight,keepaspectratio]{\dgm{a6-delivery-topology}}
+  \caption{What the composition root declares, and the degraded in-memory mode
+  (\repopath{docs/diagrams/a6-delivery-topology.mmd}).}
+\end{figure}
+
+\paragraph{Storage modes.} \repopath{InfrastructureRegistration} picks the stores once, at
+start-up. With a connection string named \texttt{payments}, every store is EF Core on PostgreSQL,
+the outbox has a dispatcher, and the schema is applied by a hosted service. Without one, every
+store is in memory, the unit of work is a no-op, and the log says at warning level that the
+service is running degraded and nothing survives a restart. \finding{A missing database degrades
+the service instead of stopping it}; the tests use this mode.
+
+\paragraph{Observability.} One OpenTelemetry trace per request; a \texttt{payments.transitions}
+counter tagged by status; \texttt{/health} and \texttt{/alive}; OTLP export when
+\texttt{OTEL\_EXPORTER\_OTLP\_ENDPOINT} is set.
+
+% ----------------------------------------------------------------------------
+\section{The seven rules}
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}r X X@{}}
+\toprule
+\# & Rule & Enforced in \\
+\midrule
+1 & Submitted is committed before the partner call. & \texttt{SubmitPaymentHandler}: mark, update, outbox, commit, then call \\
+2 & An unknown outcome is never retried. & \texttt{HttpPartnerGateway} maps failures to \texttt{Unknown}; the pipeline retries \texttt{GET} only \\
+3 & Resubmission needs the partner's word. & \texttt{ResolveSubmittedPaymentHandler}: only \texttt{NotFound}, same end-to-end id \\
+4 & The ledger is append-only and balanced. & \texttt{JournalEntry} cannot be built unbalanced per currency \\
+5 & Events through the outbox, notifications through the inbox. & every handler's unit of work; \texttt{IInbox.TryRecordAsync} first \\
+6 & Reconciliation produces breaks, not alerts. & \texttt{ReconciliationReport} with named \texttt{BreakKind}s \\
+7 & Scheme rules are data. & \repopath{scenarios/schemes.yaml} \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Rules 1 to 3 are one argument and the core of the repository. \finding{If the state before the
+call is durable, an unknowable result is never guessed at, and the only thing allowed to trigger
+a second attempt is the partner's own statement that the first one does not exist, then a
+transfer is sent at most once and is never lost track of.} \finding{F-2} is the evidence that
+the argument holds even when the code around it is wrong.
+
+% ----------------------------------------------------------------------------
+\section{Idempotency}\label{sec:idem}
+
+\texttt{POST /payments} requires an \texttt{Idempotency-Key} header; without it the API answers
+400. \texttt{InitiatePaymentHandler} computes a SHA-256 over a canonical string of the fields that
+make two requests the same request: end-to-end id, amount to two decimals in the invariant
+culture, currency upper-cased, debtor and creditor accounts, and scheme. No payment with that key:
+create one, reserve the funds and enqueue \texttt{PaymentInitiated} in one unit of work. Same key,
+same hash: return the original. Same key, different hash: a 409. Three tests pin this. Two
+identical requests racing into the database at once are not yet tested; that sits with register
+row R6.
+
+% ----------------------------------------------------------------------------
+\section{The unknown outcome and the resolver}\label{sec:unknown}
+
+ADR 0001 is the decision the repository is built around. A submit can fail in three ways that
+look alike: the connection drops before the request lands, the request lands and the response is
+lost, or the partner records the transfer and returns a 5xx. \finding{A naive retry creates a
+second transfer in two of the three.}
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.95\linewidth,height=0.5\textheight,keepaspectratio]{\dgm{a3-submit-resolve}}
+  \caption{Submit and resolve: \texttt{Submitted} committed before the call; Accepted, Rejected
+  and Unknown; the resolver asks by end-to-end id and resubmits only on \texttt{NotFound}
+  (\repopath{docs/diagrams/a3-submit-resolve.mmd}).}
+\end{figure}
+
+\paragraph{Submit.} The handler moves the payment to \texttt{Submitted}, enqueues the event and
+commits, and only then calls the partner. The gateway maps a 422 to \texttt{Rejected}; any other
+non-success status, an empty body, or an \texttt{HttpRequestException},
+\texttt{TaskCanceledException}, \texttt{TimeoutRejectedException} or
+\texttt{BrokenCircuitException} to \texttt{Unknown}; a success with a partner reference to
+\texttt{Accepted}. \finding{On Unknown the handler does nothing at all}: the payment stays at
+\texttt{Submitted}, the state that means ``ask before you act''. The resilience handler is
+configured to retry only \texttt{GET}, so the submit is sent once; its predicate is stricter than
+intended and never retries a \texttt{GET} on an exception either (\finding{F-5}).
+
+\paragraph{Resolve.} If the payment is not at \texttt{Submitted}, nothing happens. Otherwise the
+resolver asks the partner by end-to-end id: \texttt{NotFound} $\rightarrow$ resubmit once with
+the same end-to-end id; \texttt{Accepted}, \texttt{Settled}, \texttt{Rejected} $\rightarrow$ apply
+it with its posting; \texttt{Returned} $\rightarrow$ refuse, since a return for a transfer never
+accepted on this side is an error. The same end-to-end id lets the partner recognise a late first
+attempt as a duplicate; that is an assumption about the partner, stated in ADR 0001, and the simulated partner honours it by design. Five tests cover the resolver's decisions. One branch is untested
+and named badly: when the resubmit's own outcome is unknown, the resolver returns
+\texttt{SafeToResubmit} (\finding{F-3}). Nothing calls the resolver on its own yet (R8).
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.62\linewidth,height=0.5\textheight,keepaspectratio]{\dgm{a2-state-machine}}
+  \caption{The six states and every allowed transition, as listed in
+  \repopath{PaymentTransitions} (\repopath{docs/diagrams/a2-state-machine.mmd}).}
+\end{figure}
+
+% ----------------------------------------------------------------------------
+\section{Outbox and inbox}\label{sec:outbox}
+
+Every handler enqueues the payment's domain events through \texttt{IOutbox} in the same unit of
+work as the state change and the ledger entry. With PostgreSQL, \texttt{OutboxDispatcher} polls
+every two seconds, takes up to 100 undispatched messages oldest first, publishes each and marks it
+dispatched only after the publish returned: \finding{delivery is at least once by design}, and
+consumers must deduplicate on the message id. It publishes to a log line today; no broker and no
+consumer exist (R5). In the in-memory mode there is no dispatcher at all.
+
+Partner notifications are recorded in \texttt{IInbox} by notification id before anything else; a
+second delivery returns \texttt{Duplicate} and changes nothing. A notification for an unknown
+end-to-end id is recorded and reported as \texttt{UnknownPayment}, not dropped, because it is what
+reconciliation needs to see.
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.85\linewidth,height=0.5\textheight,keepaspectratio]{\dgm{a4-outbox-inbox}}
+  \caption{Outbox and inbox (\repopath{docs/diagrams/a4-outbox-inbox.mmd}).}
+\end{figure}
+
+% ----------------------------------------------------------------------------
+\section{The ledger}\label{sec:ledger}
+
+ADR 0002: every money movement is a \texttt{JournalEntry} of at least two lines that balance per
+currency; entries are appended, never updated or deleted; a correction is another entry; balances
+are sums over lines; direction is the side, never a negative amount. Five ledger tests prove that
+an unbalanced entry cannot exist, that balance is per currency, that direction is the side, that a
+rejection releases the reservation, and that a returned payment nets to zero. Balances are sums
+over rows; at volume that needs a materialised balance maintained by the same entries, which stay
+the source of truth.
+
+% ----------------------------------------------------------------------------
+\section{Reconciliation}\label{sec:recon}
+
+ADR 0003: a statement that disagrees with the ledger is the normal case on some days, and an
+alert saying ``reconciliation failed'' tells the person on call nothing. The service matches the
+day's debit lines to payments that are \texttt{Settled} with that value date, by end-to-end id and
+exact amount and currency, and returns the number matched and a list of breaks, each with both
+amounts where both exist.
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}l X@{}}
+\toprule
+Break kind & Meaning \\
+\midrule
+\texttt{OnStatementOnly} & the statement books a movement with no settled payment behind it \\
+\texttt{InLedgerOnly} & a payment settled that the statement does not show \\
+\texttt{AmountMismatch} & both sides have it, with different amounts \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.85\linewidth,height=0.5\textheight,keepaspectratio]{\dgm{a5-reconciliation}}
+  \caption{Reconciliation as a work queue (\repopath{docs/diagrams/a5-reconciliation.mmd}).}
+\end{figure}
+
+One defect is known: a payment settled on a day and returned later is no longer
+\texttt{Settled}, so its settlement line on that day's statement is reported as
+\texttt{OnStatementOnly} (\finding{F-4}). The simulated statement is a JSON reduction of what an
+ISO 20022 \texttt{camt.053} carries and has no line for the return itself (R2).
+
+% ----------------------------------------------------------------------------
+\section{Schemes and calendars}\label{sec:schemes}
+
+\begin{center}
+\begin{tabular}{@{}llll@{}}
+\toprule
+Scheme & Currency & Cut-off & Settlement business days \\
+\midrule
+\texttt{sepa} & EUR & 16:00 & 1 \\
+\texttt{faster-payments} & GBP & 23:59 & 0 \\
+\texttt{swift} & USD & 15:00 & 2 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The value date is the same business day before cut-off, else the next business day, plus the
+scheme's settlement days (\repopath{scenarios/schemes.yaml}, \texttt{ValueDateCalculator}). The only
+calendar is weekends-only: no public holidays, no TARGET2 closing days (R7).
+
+% ----------------------------------------------------------------------------
+\section{The partner simulator and the scenario classes}
+
+\finding{The partner is a simulated bank whose API shape is invented} (R1). It accepts transfers
+(deduplicated by end-to-end id), answers lookups, lets a test settle or return a transfer, serves
+a statement per date, and switches its fault profile at runtime: \texttt{None},
+\texttt{Latency} (1,500\,ms by default), \texttt{TimeoutAfterAccept} (records the transfer, holds
+the response 10,000\,ms by default), \texttt{ServerError} (503, records nothing),
+\texttt{RejectAll} (422, \texttt{AC01} by default), \texttt{StatementDrift} (0.01 by default added
+to every statement amount).
+
+Seven scenario files in four classes describe what the rail must survive, as data: \texttt{happy}
+(2), \texttt{partner-failure} (2), \texttt{duplicate} (2), \texttt{reconciliation} (1). \finding{They
+are a specification, not an executed suite}: a test checks that they parse; no runner drives them
+against the API and the simulator yet (R3). That runner is also the closing condition that would
+guard F-1 and F-2 against regression.
+
+% ----------------------------------------------------------------------------
+\section{CI and governance}
+
+\repopath{.github/workflows/ci.yml} builds and tests on every pull request and on pushes to
+\texttt{main}, and lints the documentation. \repopath{AGENTS.md} sets the rules: .NET 10, warnings
+as errors, one pull request per change with CI green, scheme rules and scenarios as data, nothing
+that talks to a real bank, no secrets in the tree. The register is never silently wrong; a new
+decision is a new record. Further work is planned in three streams under \repopath{docs/plans/},
+and until a slice merges this document does not describe it as done.
+
+% ----------------------------------------------------------------------------
+\section{What the tests and the walk-through caught}\label{sec:caught}
+
+\finding{Five findings, none caught by a unit test} (\repopath{docs/FINDINGS.md}).
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}l X l l@{}}
+\toprule
+\# & Defect & Found by & Status \\
+\midrule
+F-1 & Enums crossed the wire as integers; every partner notification and statement line failed to bind & walk-through & fixed \\
+F-2 & A timeout after the partner accepted surfaced as a 500, not as an Unknown outcome & walk-through & fixed \\
+F-3 & The resolver reports \texttt{SafeToResubmit} after a resubmit whose own outcome is unknown & writing the overview & open \\
+F-4 & A returned payment is an \texttt{OnStatementOnly} break for its settlement day & writing the overview & open \\
+F-5 & The status lookup is never retried on an exception, only on a 5xx & writing the overview & open \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+The pattern is the finding. The tests are good at what they test, in one process, against
+in-memory stores and a scripted partner; a defect between processes (F-1), in a library's
+exception types (F-2), in an HTTP pipeline no test drives (F-5), or in an assumption the code and
+its tests share (F-3, F-4) cannot fail them. \finding{F-2 is also the best evidence for the
+design: the defect was real, and committing the status before the call meant it cost an error
+message, not a duplicate transfer.}
+
+% ----------------------------------------------------------------------------
+\section{Production readiness, honestly}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{The partner is simulated.} No real bank, no scheme sandbox, no ISO 20022 message
+        (R1, R2); lookup by end-to-end id is an assumption the simulator satisfies (ADR 0001).
+  \item \textbf{The scenarios do not run} (R3); the two walk-through findings have no automated guard.
+  \item \textbf{PostgreSQL has not run in CI}; the schema is applied with \texttt{EnsureCreated}
+        and no migration exists (R4).
+  \item \textbf{The degraded mode is degraded}: a no-op unit of work, no dispatcher, nothing
+        survives a restart.
+  \item \textbf{Concurrency is a column} (R6). \textbf{Nothing resolves on its own} (R8).
+        \textbf{No load, no chaos} (R9).
+  \item \textbf{No authentication on the API; no sanctions, AML or limits} (R10 for the controls).
+  \item \textbf{Three open defects} (F-3, F-4, F-5).
+\end{itemize}
+
+% ----------------------------------------------------------------------------
+\section{The register}
+
+Ten open rows, none closed (\repopath{docs/REGISTER.md}), quoted by headline:
+
+\begin{longtable}{@{}l p{0.82\linewidth}@{}}
+\toprule
+\# & Not proved \\
+\midrule
+\endhead
+R1 & Nothing here has ever talked to a real bank. \\
+R2 & No ISO 20022 message is parsed or produced. \\
+R3 & The scenario files are a specification, not an executed suite. \\
+R4 & PostgreSQL persistence has not run in CI. \\
+R5 & The outbox dispatcher publishes to a log line. \\
+R6 & Concurrency is a column, not a test. \\
+R7 & The business calendar is weekends only. \\
+R8 & The resolver is called, never scheduled. \\
+R9 & No load, no chaos. \\
+R10 & Sanctions, AML, limits: absent. \\
+\bottomrule
+\end{longtable}
+
+% ----------------------------------------------------------------------------
+\section{Decisions and non-goals}
+
+\textbf{ADR 0001}: an unknown submit outcome is never retried blind. \textbf{ADR 0002}: money is a
+double-entry, append-only ledger. \textbf{ADR 0003}: reconciliation produces breaks, not alerts.
+
+Non-goals: being a payments product; talking to a real bank; compliance controls (R10); inbound
+payments, FX, fees and netting; fuzzy reconciliation (anything else is a new, named break kind).
+
+% ----------------------------------------------------------------------------
+\section{Relationship to the standards}
+
+The repository conforms to architecture-standards \cite{standards} and does not re-derive it. Its
+documentation follows agent-eval-bench \cite{aeb}: a long-form overview as the source of truth, a
+findings report written to be unflattering, a register of what is not proved, and presentation
+editions, like this one, that add nothing the overview does not contain.
+
+% ----------------------------------------------------------------------------
+\section{Reproducibility}
+
+Every number in this document is reproducible from the repository at the commit this PDF was
+built from.
+
+\begin{verbatim}
+git clone https://github.com/konradcinkusz/payments-bench
+cd payments-bench
+dotnet test                 # the test counts: 15 domain + 22 application
+npm ci                      # pinned doc tooling, including mermaid-cli
+npm run lint                # markdown, links, diagrams, papers
+npm run render:diagrams     # docs/diagrams/*.mmd -> docs/diagrams/rendered/*.pdf
+cd docs/papers && latexmk -pdf payments-bench-overview.tex
+\end{verbatim}
+
+The walk-through behind F-1 and F-2 is the README's ``Run it'' section: start
+\texttt{PaymentsBench.PartnerSimulator} and \texttt{PaymentsBench.Api} without a database, then
+initiate, submit under \texttt{TimeoutAfterAccept}, resolve, settle, notify twice and reconcile with
+\texttt{curl}. The F-4 probe is described step by step in the findings report.
+
+% ----------------------------------------------------------------------------
+\begin{thebibliography}{9}
+\bibitem{overview} payments-bench, \texttt{docs/OVERVIEW.md}: the source of truth this document presents. \url{https://github.com/konradcinkusz/payments-bench/blob/main/docs/OVERVIEW.md}
+\bibitem{findings} payments-bench, \texttt{docs/FINDINGS.md}: what building and testing the bench caught. \url{https://github.com/konradcinkusz/payments-bench/blob/main/docs/FINDINGS.md}
+\bibitem{register} payments-bench, \texttt{docs/REGISTER.md}: what is not proved. \url{https://github.com/konradcinkusz/payments-bench/blob/main/docs/REGISTER.md}
+\bibitem{arch} payments-bench, \texttt{docs/ARCHITECTURE.md}: the shape and the seven rules. \url{https://github.com/konradcinkusz/payments-bench/blob/main/docs/ARCHITECTURE.md}
+\bibitem{adr} payments-bench, \texttt{docs/adr/}: decision records 0001--0003. \url{https://github.com/konradcinkusz/payments-bench/tree/main/docs/adr}
+\bibitem{scenarios} payments-bench, \texttt{scenarios/}: the fault scenarios and scheme rules as data. \url{https://github.com/konradcinkusz/payments-bench/tree/main/scenarios}
+\bibitem{standards} architecture-standards. \url{https://github.com/konradcinkusz/architecture-standards}
+\bibitem{aeb} agent-eval-bench, the documentation model. \url{https://github.com/konradcinkusz/agent-eval-bench}
+\end{thebibliography}
+
+\end{document}

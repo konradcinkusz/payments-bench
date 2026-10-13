@@ -48,5 +48,7 @@ jobs:
         run: npm run lint:links
       - name: Check diagrams
         run: npm run lint:diagrams
+      - name: Check papers
+        run: npm run lint:papers
       - name: Check the generated site is current
         run: npm run site:check

@@ -1,0 +1,118 @@
+name: Build Overview PDF
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Renders docs/papers/payments-bench-overview.tex, the LaTeX edition of
+#  docs/OVERVIEW.md, to PDF.
+#
+#  Three triggers, because two questions need answering, not one
+#  (architecture-standards, 00-RESEARCH-DOCUMENTATION.md, "Building the PDF
+#  in CI"):
+#
+#    workflow_dispatch  how a reader GETS the current PDF: run it, download the
+#                       artifact.
+#    pull_request       how a break is CAUGHT: a LaTeX error or a diagram that
+#                       stopped rendering is invisible in a diff. Path-filtered,
+#                       so a change that does not touch the document costs
+#                       nothing.
+#    push of a v* tag   the PDF ships with a release, attached to the GitHub
+#                       Release as PaymentsBench_Overview.pdf.
+#
+#  PDFs and rendered diagrams are build output and never committed (see the
+#  "LaTeX build output" block in .gitignore). `contents: write` is granted only
+#  to the release job, which runs only on a tag.
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'docs/papers/**'
+      - 'docs/diagrams/**'
+      - 'scripts/render-diagrams.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/build-overview-pdf.yml'
+  push:
+    tags:
+      - 'v*'
+      - 'V*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-overview-pdf-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build PDF
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The paper includes the repository's own Mermaid diagrams, rendered to
+      # vector PDF from docs/diagrams/*.mmd rather than redrawn in TikZ: one
+      # source, two output formats. mermaid-cli comes from the lockfile.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Render diagrams
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+        run: |
+          set -euo pipefail
+          npm ci
+          export PUPPETEER_EXECUTABLE_PATH="$(command -v google-chrome || command -v chromium || command -v chromium-browser)"
+          npm run render:diagrams
+
+      - name: Build PDF
+        uses: xu-cheng/latex-action@v4
+        with:
+          root_file: payments-bench-overview.tex
+          working_directory: docs/papers
+
+      - name: Rename PDF
+        run: mv docs/papers/payments-bench-overview.pdf PaymentsBench_Overview.pdf
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PaymentsBench_Overview_PDF
+          path: PaymentsBench_Overview.pdf
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Summary
+        run: |
+          {
+            echo "## Overview PDF built"
+            echo
+            echo "Rendered from \`docs/papers/payments-bench-overview.tex\`, the LaTeX edition of \`docs/OVERVIEW.md\`."
+            echo "Download **PaymentsBench_Overview_PDF** from this run's Artifacts section."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  release:
+    name: Attach PDF to the release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: PaymentsBench_Overview_PDF
+
+      - name: Attach to the GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: PaymentsBench_Overview.pdf
+          fail_on_unmatched_files: true

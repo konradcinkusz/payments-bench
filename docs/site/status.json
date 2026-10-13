@@ -41,6 +41,10 @@
       {
         "number": 7,
         "title": "Diagrams: six Mermaid sources, render and check scripts, DIAGRAMS.md"
+      },
+      {
+        "number": 15,
+        "title": "PDF edition of the overview: house preamble, check-papers, Build Overview PDF workflow"
       }
     ],
     "source": "docs/plans",
