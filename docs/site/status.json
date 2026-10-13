@@ -14,6 +14,11 @@
       "value": 22,
       "source": "tests/PaymentsBench.Application.Tests",
       "asOf": "2026-10-13"
+    },
+    "integration": {
+      "value": 26,
+      "source": "tests/PaymentsBench.Integration.Tests",
+      "asOf": "2026-10-13"
     }
   },
   "mergedPullRequests": {

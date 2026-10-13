@@ -1,4 +1,4 @@
-# ADR 0004: The schema is migrated by a hosted service behind a gate
+# ADR 0007: The schema is migrated by a hosted service behind a gate
 
 **Status:** accepted, 2026-10-13
 
