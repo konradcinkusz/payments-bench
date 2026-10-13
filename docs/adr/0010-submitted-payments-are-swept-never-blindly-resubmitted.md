@@ -1,4 +1,4 @@
-# ADR 0009: Submitted payments are swept, never blindly resubmitted
+# ADR 0010: Submitted payments are swept, never blindly resubmitted
 
 **Status:** accepted, 2026-10-13
 

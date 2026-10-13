@@ -19,6 +19,9 @@ public interface IPaymentRepository
     /// </summary>
     Task<SubmittedPaymentWindow> ListSubmittedBeforeAsync(DateTimeOffset cutoff, int limit, CancellationToken cancellationToken);
 
+    /// <summary>Filters, then returns the requested page, newest first, ties broken by id, with totals over the filtered set.</summary>
+    Task<PaymentPage> ListAsync(PaymentQuery query, CancellationToken cancellationToken);
+
     Task AddAsync(Payment payment, CancellationToken cancellationToken);
 
     Task UpdateAsync(Payment payment, CancellationToken cancellationToken);

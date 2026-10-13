@@ -40,6 +40,36 @@ public sealed class InMemoryPaymentRepository : IPaymentRepository
         return Task.FromResult(new SubmittedPaymentWindow(ids, oldest));
     }
 
+    public Task<PaymentPage> ListAsync(PaymentQuery query, CancellationToken cancellationToken)
+    {
+        var filtered = _payments.Values.Where(p => Matches(p, query)).ToList();
+
+        var counts = filtered.GroupBy(p => p.Status).ToDictionary(g => g.Key, g => g.Count());
+        var items = filtered.OrderByDescending(p => p.CreatedAt).ThenBy(p => p.Id).Skip(query.Skip).Take(query.Limit).ToList();
+        return Task.FromResult(new PaymentPage(items, filtered.Count, counts));
+    }
+
+    private static bool Matches(Payment payment, PaymentQuery query)
+    {
+        if (query.Status is not null && payment.Status != query.Status)
+        {
+            return false;
+        }
+
+        if (query.Scheme is not null && payment.Scheme != query.Scheme)
+        {
+            return false;
+        }
+
+        if (query.EndToEndId is not null && payment.EndToEndId != query.EndToEndId)
+        {
+            return false;
+        }
+
+        return (query.CreatedFrom is null || payment.CreatedAt >= query.CreatedFrom)
+            && (query.CreatedTo is null || payment.CreatedAt <= query.CreatedTo);
+    }
+
     public Task AddAsync(Payment payment, CancellationToken cancellationToken)
     {
         if (!_payments.TryAdd(payment.Id, payment))

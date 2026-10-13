@@ -41,6 +41,51 @@ public sealed class EfPaymentRepository(PaymentsDbContext db) : IPaymentReposito
         return new SubmittedPaymentWindow(ids, oldest);
     }
 
+    public async Task<PaymentPage> ListAsync(PaymentQuery query, CancellationToken cancellationToken)
+    {
+        var filtered = db.Payments.AsNoTracking().AsQueryable();
+        if (query.Status is { } status)
+        {
+            filtered = filtered.Where(p => p.Status == (int)status);
+        }
+
+        if (query.Scheme is { } scheme)
+        {
+            filtered = filtered.Where(p => p.Scheme == scheme);
+        }
+
+        if (query.EndToEndId is { } endToEndId)
+        {
+            filtered = filtered.Where(p => p.EndToEndId == endToEndId);
+        }
+
+        if (query.CreatedFrom is { } createdFrom)
+        {
+            filtered = filtered.Where(p => p.CreatedAt >= createdFrom);
+        }
+
+        if (query.CreatedTo is { } createdTo)
+        {
+            filtered = filtered.Where(p => p.CreatedAt <= createdTo);
+        }
+
+        // One grouped query over the filtered base gives every per-status count; the total is their sum.
+        var grouped = await filtered
+            .GroupBy(p => p.Status)
+            .Select(g => new { Status = g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+        var counts = grouped.ToDictionary(g => (PaymentStatus)g.Status, g => g.Count);
+
+        var rows = await filtered
+            .OrderByDescending(p => p.CreatedAt)
+            .ThenBy(p => p.Id)
+            .Skip(query.Skip)
+            .Take(query.Limit)
+            .ToListAsync(cancellationToken);
+
+        return new PaymentPage(rows.Select(r => Rehydrate(r)!).ToList(), counts.Values.Sum(), counts);
+    }
+
     public Task AddAsync(Payment payment, CancellationToken cancellationToken)
     {
         db.Payments.Add(ToRow(payment, version: 0));
