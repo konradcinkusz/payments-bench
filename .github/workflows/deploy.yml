@@ -117,8 +117,9 @@ jobs:
             files="$(git diff --name-only "$previous" HEAD)"
             has() { grep -Eq "$1" <<<"$files"; }
 
-            # Shared inputs compiled into every image invalidate all of them.
-            if has '^(Directory\.Build\.props|Directory\.Packages\.props|global\.json|\.dockerignore|src/PaymentsBench\.ServiceDefaults/)'; then
+            # Shared inputs compiled or copied into every image invalidate all of them (both Dockerfiles
+            # COPY scenarios/: scheme rules and calendars ship as data).
+            if has '^(Directory\.Build\.props|Directory\.Packages\.props|global\.json|\.dockerignore|scenarios/|src/PaymentsBench\.ServiceDefaults/)'; then
               mark partner "shared kernel or build props changed since $previous"
               mark api "shared kernel or build props changed since $previous"
             fi

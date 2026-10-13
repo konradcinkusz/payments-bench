@@ -183,7 +183,7 @@ this workflow is exercised in CI without an account.
 ### What a later tag does
 
 Change detection compares against the previous tag. A change to `Directory.Build.props`,
-`Directory.Packages.props`, `global.json`, `.dockerignore` or the service defaults rebuilds both
+`Directory.Packages.props`, `global.json`, `.dockerignore`, anything under `scenarios/` (both images carry it) or the service defaults rebuilds both
 images; a change under `Domain`, `Application`, `Infrastructure` or `Api` rebuilds the API; the
 simulator's sources rebuild the partner; a change to a `flyio/*.fly.toml` selects its app. PostgreSQL
 redeploys only when its own config changed or the app is missing, because a redeploy restarts it. A
