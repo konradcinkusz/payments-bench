@@ -25,7 +25,7 @@ status, `/health` and `/alive`, OTLP export when `OTEL_EXPORTER_OTLP_ENDPOINT` i
 ## Run it
 
 ```bash
-dotnet test                                   # 37 tests, no database needed
+dotnet test                                   # 72 tests, no database needed
 dotnet run --project src/PaymentsBench.AppHost   # Aspire: PostgreSQL + simulator + API + dashboard
 ```
 

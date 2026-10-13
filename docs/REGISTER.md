@@ -11,11 +11,13 @@ Rows are deleted only when the closing condition is met; a closed row moves to t
 | R4 | 2026-10-13 | **PostgreSQL persistence has not run in CI.** The EF Core stores compile and the schema is applied with `EnsureCreated`; no integration test has written a payment to a real database. | A Testcontainers-based test exercises `EfPaymentRepository`, `EfLedger`, `EfOutbox` and `EfInbox`, and an initial EF Core migration replaces `EnsureCreated`. |
 | R5 | 2026-10-13 | **The outbox dispatcher publishes to a log line.** No broker is wired; at-least-once delivery to a consumer is a design claim. | An `IEventPublisher` against a real broker, and a consumer-side dedupe test. |
 | R6 | 2026-10-13 | **Concurrency is a column, not a test.** `Version` is a concurrency token; no test races two writers on one payment. | A test that proves one of two concurrent updates fails with a concurrency exception. |
-| R7 | 2026-10-13 | **The business calendar is weekends only.** No public holidays, no per-scheme calendar, no TARGET2 closing days. | Holiday calendars as data per scheme, with a test on a known closing day. |
 | R8 | 2026-10-13 | **The resolver is called, never scheduled.** `POST /payments/{id}/resolve` exists; nothing sweeps Submitted payments older than N seconds on its own. | A background sweep with a metric on the age of the oldest Submitted payment, and an alert threshold documented. |
 | R9 | 2026-10-13 | **No load, no chaos.** Nothing has measured throughput, and the simulator's faults are set by hand, not injected randomly under load. | A k6 or equivalent run with the simulator cycling fault profiles, and numbers in this file. |
 | R10 | 2026-10-13 | **Sanctions, AML, limits: absent.** The service moves any amount to any account. | Out of scope for the bench; stays open as a statement of scope. |
+| R11 | 2026-10-13 | **The computed value date is not stamped on the payment.** `ValueDateCalculator` and the per-scheme `HolidayCalendar` exist and are tested, but nothing calls them at submit or acceptance; `Payment.ValueDate` is still set only when the partner reports settlement (or defaults to today's date). The calendars are proved; the value date a customer is shown at submission is not. | `SubmitPaymentHandler` (or acceptance) computes the value date from the scheme's rules and calendar, stamps it on the payment (a domain and schema change), and a test pins it for a known closing day. |
 
 ## Closed
 
-None yet.
+| # | Closed | Was not proved | Proved by |
+|---|---|---|---|
+| R7 | 2026-10-13 | **The business calendar was weekends only.** No public holidays, no per-scheme calendar, no TARGET2 closing days. | Calendars are data under `scenarios/calendars/` (target2, uk-faster-payments, us-fedwire), loaded into `ISchemeCatalog` at start-up. `HolidayCalendarTests` (Christmas 2026 and Good Friday/Easter Monday 2026 move the SEPA value date; weekends closed; out-of-range dates throw `CalendarCoverageException`) and `SchemeCatalogTests` (real files load, every scheme resolves its calendar, Fedwire observed holidays, malformed or missing data names the file, unknown scheme and wrong currency refused). See ADR 0004. |
