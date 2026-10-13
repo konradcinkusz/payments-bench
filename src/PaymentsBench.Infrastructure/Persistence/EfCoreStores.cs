@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using PaymentsBench.Application.Ports;
 using PaymentsBench.Domain;
 using PaymentsBench.Domain.Ledger;
@@ -7,21 +8,38 @@ using PaymentsBench.Domain.Payments;
 
 namespace PaymentsBench.Infrastructure.Persistence;
 
-public sealed class EfPaymentRepository(PaymentsDbContext db) : IPaymentRepository
+/// <summary>
+/// Optimistic concurrency by remembered version (P4). Every payment handed out is remembered
+/// with the <c>Version</c> it was read at, per repository instance, which is per scope. An update
+/// checks <em>that</em> version, never a fresh read, so a handler that lost a race fails at commit
+/// instead of overwriting the winner. Once a commit succeeds the remembered version advances,
+/// which keeps a handler that updates the same payment twice in one scope working.
+/// </summary>
+public sealed class EfPaymentRepository : IPaymentRepository
 {
+    private readonly PaymentsDbContext db;
+    private readonly Dictionary<Guid, int> readVersions = [];
+    private readonly Dictionary<Guid, int> pendingVersions = [];
+
+    public EfPaymentRepository(PaymentsDbContext db)
+    {
+        this.db = db;
+        db.SavedChanges += (_, _) => AdvanceCommittedVersions();
+    }
+
     public async Task<Payment?> GetAsync(Guid id, CancellationToken cancellationToken) =>
-        Rehydrate(await db.Payments.AsNoTracking().SingleOrDefaultAsync(p => p.Id == id, cancellationToken));
+        Hand(await db.Payments.AsNoTracking().SingleOrDefaultAsync(p => p.Id == id, cancellationToken));
 
     public async Task<Payment?> FindByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken) =>
-        Rehydrate(await db.Payments.AsNoTracking().SingleOrDefaultAsync(p => p.IdempotencyKey == idempotencyKey, cancellationToken));
+        Hand(await db.Payments.AsNoTracking().SingleOrDefaultAsync(p => p.IdempotencyKey == idempotencyKey, cancellationToken));
 
     public async Task<Payment?> FindByEndToEndIdAsync(string endToEndId, CancellationToken cancellationToken) =>
-        Rehydrate(await db.Payments.AsNoTracking().SingleOrDefaultAsync(p => p.EndToEndId == endToEndId, cancellationToken));
+        Hand(await db.Payments.AsNoTracking().SingleOrDefaultAsync(p => p.EndToEndId == endToEndId, cancellationToken));
 
     public async Task<IReadOnlyList<Payment>> ListByStatusAsync(PaymentStatus status, CancellationToken cancellationToken)
     {
         var rows = await db.Payments.AsNoTracking().Where(p => p.Status == (int)status).ToListAsync(cancellationToken);
-        return rows.Select(r => Rehydrate(r)!).ToList();
+        return rows.Select(r => Hand(r)!).ToList();
     }
 
     public async Task<PaymentPage> ListAsync(PaymentQuery query, CancellationToken cancellationToken)
@@ -66,7 +84,7 @@ public sealed class EfPaymentRepository(PaymentsDbContext db) : IPaymentReposito
             .Take(query.Limit)
             .ToListAsync(cancellationToken);
 
-        return new PaymentPage(rows.Select(r => Rehydrate(r)!).ToList(), counts.Values.Sum(), counts);
+        return new PaymentPage(rows.Select(r => Hand(r)!).ToList(), counts.Values.Sum(), counts);
     }
 
     public Task AddAsync(Payment payment, CancellationToken cancellationToken)
@@ -75,11 +93,55 @@ public sealed class EfPaymentRepository(PaymentsDbContext db) : IPaymentReposito
         return Task.CompletedTask;
     }
 
-    public async Task UpdateAsync(Payment payment, CancellationToken cancellationToken)
+    public Task UpdateAsync(Payment payment, CancellationToken cancellationToken)
     {
-        var row = await db.Payments.SingleAsync(p => p.Id == payment.Id, cancellationToken);
-        var next = ToRow(payment, row.Version + 1);
-        db.Entry(row).CurrentValues.SetValues(next);
+        if (!readVersions.TryGetValue(payment.Id, out var readVersion))
+        {
+            throw new InvalidOperationException(
+                $"Payment {payment.Id} was not read in this scope, so there is no version to check. Load it with GetAsync, FindBy* or a list before updating it.");
+        }
+
+        var next = ToRow(payment, readVersion + 1);
+        var tracked = db.ChangeTracker.Entries<PaymentRow>().FirstOrDefault(e => e.Entity.Id == payment.Id);
+        if (tracked is null)
+        {
+            db.Payments.Attach(next);
+            tracked = db.Entry(next);
+            tracked.State = EntityState.Modified;
+        }
+        else
+        {
+            tracked.CurrentValues.SetValues(next);
+        }
+
+        // The check is against the version the aggregate was read at, not whatever is stored now.
+        tracked.Property(p => p.Version).OriginalValue = readVersion;
+        pendingVersions[payment.Id] = readVersion + 1;
+        return Task.CompletedTask;
+    }
+
+    private void AdvanceCommittedVersions()
+    {
+        foreach (var (id, version) in pendingVersions)
+        {
+            readVersions[id] = version;
+        }
+
+        pendingVersions.Clear();
+    }
+
+    private Payment? Hand(PaymentRow? row)
+    {
+        if (row is null)
+        {
+            return null;
+        }
+
+        readVersions[row.Id] = row.Version;
+        return PaymentRehydrator.Rehydrate(new PaymentState(
+            row.Id, row.IdempotencyKey, row.RequestHash, row.EndToEndId, new Money(row.Amount, row.Currency),
+            row.DebtorAccount, row.CreditorAccount, row.Scheme, (PaymentStatus)row.Status, row.ReasonCode,
+            row.PartnerReference, row.ValueDate, row.CreatedAt, row.UpdatedAt));
     }
 
     private static PaymentRow ToRow(Payment payment, int version) => new()
@@ -101,64 +163,6 @@ public sealed class EfPaymentRepository(PaymentsDbContext db) : IPaymentReposito
         UpdatedAt = payment.UpdatedAt,
         Version = version,
     };
-
-    /// <summary>
-    /// Rebuilds the aggregate by replaying the moves the stored status implies. The domain keeps
-    /// its invariants; persistence does not get a back door. Replay produces events, which are
-    /// cleared because they were already published when they first happened.
-    /// </summary>
-    private static Payment? Rehydrate(PaymentRow? row)
-    {
-        if (row is null)
-        {
-            return null;
-        }
-
-        var payment = Payment.Initiate(
-            row.Id,
-            row.IdempotencyKey,
-            row.RequestHash,
-            row.EndToEndId,
-            new Money(row.Amount, row.Currency),
-            row.DebtorAccount,
-            row.CreditorAccount,
-            row.Scheme,
-            row.CreatedAt);
-
-        var status = (PaymentStatus)row.Status;
-        var at = row.UpdatedAt;
-        if (status >= PaymentStatus.Submitted)
-        {
-            payment.MarkSubmitted(at);
-        }
-
-        switch (status)
-        {
-            case PaymentStatus.Accepted:
-                payment.MarkAccepted(row.PartnerReference ?? row.EndToEndId, at);
-                break;
-            case PaymentStatus.Settled:
-                payment.MarkAccepted(row.PartnerReference ?? row.EndToEndId, at);
-                payment.MarkSettled(row.ValueDate ?? DateOnly.FromDateTime(at.UtcDateTime), at);
-                break;
-            case PaymentStatus.Rejected:
-                payment.MarkRejected(row.ReasonCode ?? "unknown", at);
-                break;
-            case PaymentStatus.Returned:
-                payment.MarkAccepted(row.PartnerReference ?? row.EndToEndId, at);
-                payment.MarkSettled(row.ValueDate ?? DateOnly.FromDateTime(at.UtcDateTime), at);
-                payment.MarkReturned(row.ReasonCode ?? "unknown", at);
-                break;
-            case PaymentStatus.Initiated:
-            case PaymentStatus.Submitted:
-                break;
-            default:
-                throw new InvalidOperationException($"Unknown stored status {row.Status}.");
-        }
-
-        payment.ClearEvents();
-        return payment;
-    }
 }
 
 public sealed class EfLedger(PaymentsDbContext db) : ILedger
@@ -238,5 +242,33 @@ public sealed class EfInbox(PaymentsDbContext db) : IInbox
 
 public sealed class EfUnitOfWork(PaymentsDbContext db) : IUnitOfWork
 {
-    public Task CommitAsync(CancellationToken cancellationToken) => db.SaveChangesAsync(cancellationToken);
+    private const string IdempotencyKeyIndex = "IX_payments_IdempotencyKey";
+    private const string EndToEndIdIndex = "IX_payments_EndToEndId";
+
+    /// <summary>
+    /// Saves everything staged in the scope or nothing. A lost optimistic-concurrency race, or a
+    /// unique violation on the payment's idempotency key or end-to-end id (a concurrent duplicate
+    /// initiation), becomes <see cref="ConcurrencyConflictException"/>, and the change tracker is
+    /// cleared so the scope is not left half-applied. No EF or Npgsql type leaves this class (P11).
+    /// </summary>
+    public async Task CommitAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException e)
+        {
+            var id = e.Entries.Select(x => x.Entity).OfType<PaymentRow>().Select(r => (Guid?)r.Id).FirstOrDefault();
+            db.ChangeTracker.Clear();
+            throw id is { } paymentId ? ConcurrencyConflictException.Changed(paymentId, e) : new ConcurrencyConflictException(
+                "The payment changed concurrently. Re-read it and try again.", e);
+        }
+        catch (DbUpdateException e) when (e.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } pg
+            && pg.ConstraintName is IdempotencyKeyIndex or EndToEndIdIndex)
+        {
+            db.ChangeTracker.Clear();
+            throw ConcurrencyConflictException.Duplicate(e);
+        }
+    }
 }
