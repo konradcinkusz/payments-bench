@@ -42,7 +42,8 @@ Each figure names the file it was measured in; the measurements were taken on `m
 ## Run it
 
 ```bash
-dotnet test                                   # 191 tests; the 36 integration tests need PostgreSQL (see below)
+dotnet test                                   # 235 tests; the 36 integration tests need PostgreSQL (see below)
+dotnet test tests/PaymentsBench.Scenarios     # every scenarios/*.yaml end to end, in process; PostgreSQL too when the variable below is set
 dotnet run --project src/PaymentsBench.AppHost   # Aspire: PostgreSQL + simulator + API + dashboard
 ```
 
@@ -51,6 +52,17 @@ with Docker running they start a `postgres:16-alpine` Testcontainers container; 
 `PAYMENTSBENCH_TEST_POSTGRES` to a server that trusts you, for example
 `PAYMENTSBENCH_TEST_POSTGRES="Host=localhost;Port=5432;Username=postgres" dotnet test`. Each test
 class gets its own throwaway database. With neither, they fail with a message saying so; they are never skipped.
+
+End to end, over HTTP, with Playwright (`tests/PaymentsBench.E2E`): the suite starts the simulator and
+the API in the in-memory mode, drives the happy path, the duplicate request and notification, the
+timeout-after-accept and 503 recoveries, the rejection, the statement drift and the return, and checks
+the documentation site renders from `file://` with no external request. It screenshots the site into
+`tests/PaymentsBench.E2E/screenshots/` (not committed). With `PB_DASHBOARD_URL` set to a running
+OpenTelemetry dashboard it also screenshots the traces of the run.
+
+```bash
+dotnet build -c Release && cd tests/PaymentsBench.E2E && npm ci && npx playwright install chromium && npx playwright test
+```
 
 Or without Aspire, in memory, two terminals:
 

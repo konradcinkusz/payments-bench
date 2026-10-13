@@ -12,8 +12,24 @@ builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.C
 var app = builder.Build();
 app.MapDefaultEndpoints();
 
+var calls = new CallCounter();
+app.Use(async (context, next) =>
+{
+    if (!context.Request.Path.StartsWithSegments("/diagnostics", StringComparison.Ordinal))
+    {
+        calls.Record(context.Request.Method, context.GetEndpoint() is RouteEndpoint route ? route.RoutePattern.RawText ?? string.Empty : context.Request.Path.Value ?? string.Empty);
+    }
+
+    await next(context);
+});
+
 var transfers = new ConcurrentDictionary<string, SimulatedTransfer>(StringComparer.Ordinal);
 var profile = new FaultProfileState();
+
+// SIMULATED diagnostics: how many times the simulated partner was called, per "METHOD route-pattern",
+// counted when the request arrives. It is the partner's own word on what reached it, which the
+// scenario runner uses to assert "submitted once" without trusting the API's account of itself.
+app.MapGet("/diagnostics/calls", () => Results.Ok(new { simulated = true, calls = calls.Snapshot() }));
 
 app.MapGet("/faults", () => Results.Ok(profile.Current));
 
@@ -96,6 +112,15 @@ app.MapGet("/statements/{date}", (DateOnly date) =>
 });
 
 await app.RunAsync();
+
+internal sealed class CallCounter
+{
+    private readonly ConcurrentDictionary<string, int> counts = new(StringComparer.Ordinal);
+
+    public void Record(string method, string route) => counts.AddOrUpdate($"{method} {route}", 1, (_, n) => n + 1);
+
+    public IReadOnlyDictionary<string, int> Snapshot() => new Dictionary<string, int>(counts, StringComparer.Ordinal);
+}
 
 internal enum FaultKind
 {

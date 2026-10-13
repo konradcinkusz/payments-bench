@@ -1,6 +1,6 @@
 id: return-after-settlement
 class: happy
-description: A settled transfer is returned by the receiving bank. The customer gets the funds back and nostro nets to zero.
+description: A settled transfer is returned by the receiving bank. The customer gets the funds back, nostro nets to zero, and the settlement day's statement still reconciles (no OnStatementOnly break for a payment returned since).
 partner:
   fault: none
 steps:
@@ -11,6 +11,9 @@ steps:
       currency: EUR
       scheme: sepa
   - submit: E2E-RET-1
+  - partnerSettles:
+      endToEndId: E2E-RET-1
+      valueDate: next-business-day
   - notify:
       notificationId: N-RET-1
       endToEndId: E2E-RET-1
@@ -20,9 +23,15 @@ steps:
       endToEndId: E2E-RET-1
       kind: Returned
       reasonCode: AC04
+  - partnerReturns:
+      endToEndId: E2E-RET-1
+      reasonCode: AC04
+  - reconcile: value-date
 expect:
   status: Returned
   ledger:
     customer-funds: 0.00
     pending-outbound: 0.00
     nostro: 0.00
+  reconciliation:
+    breaks: 0

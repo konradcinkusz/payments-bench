@@ -74,22 +74,21 @@ public static class InfrastructureRegistration
         services.AddHealthChecks().AddCheck<MigrationHealthCheck>("migrations");
 
         var partnerBaseAddress = configuration["Partner:BaseAddress"] ?? "http://partner";
+        var timeouts = PartnerTimeouts.From(configuration);
         services.AddHttpClient<IPartnerGateway, HttpPartnerGateway>(PartnerClientName, client =>
             {
                 client.BaseAddress = new Uri(partnerBaseAddress);
-                client.Timeout = TimeSpan.FromSeconds(5);
+                client.Timeout = timeouts.Client;
             })
             .AddStandardResilienceHandler(options =>
             {
                 // Submit must not be retried: the handler turns failures into an Unknown outcome
                 // and the resolver asks the partner. Retries here apply only to idempotent methods.
-                options.Retry.ShouldHandle = args => ValueTask.FromResult(
-                    args.Outcome.Result?.RequestMessage?.Method == HttpMethod.Get
-                    && (args.Outcome.Exception is not null || (int?)args.Outcome.Result?.StatusCode >= 500));
+                options.Retry.ShouldHandle = PartnerResilience.ShouldRetry;
                 options.Retry.MaxRetryAttempts = 3;
                 options.Retry.UseJitter = true;
-                options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(4);
-                options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(15);
+                options.AttemptTimeout.Timeout = timeouts.Attempt;
+                options.TotalRequestTimeout.Timeout = timeouts.Total;
                 options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(30);
                 options.CircuitBreaker.FailureRatio = 0.5;
                 options.CircuitBreaker.MinimumThroughput = 10;

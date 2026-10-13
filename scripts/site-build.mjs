@@ -90,6 +90,17 @@ function loadRegister() {
   const closedAt = lines.findIndex((line) => /^##\s+Closed\b/.test(line));
   const openLines = closedAt === -1 ? lines : lines.slice(0, closedAt);
   const closedLines = closedAt === -1 ? [] : lines.slice(closedAt + 1);
+  // A row appended below the table (after prose that follows it) renders as a stray paragraph on
+  // GitHub and would be silently dropped from the page: every row must sit in a table whose first
+  // line is the "| # |" header and whose second line is the delimiter.
+  openLines.forEach((line, index) => {
+    if (!/^\|\s*R\d+\s*\|/.test(line)) return;
+    let start = index;
+    while (start > 0 && /^\|/.test(openLines[start - 1])) start -= 1;
+    if (!/^\|\s*#\s*\|/.test(openLines[start]) || !/^\|\s*-/.test(openLines[start + 1] ?? '')) {
+      fail(`docs/REGISTER.md:${index + 1}: register row is outside the register table: ${line.slice(0, 60)}`);
+    }
+  });
   const open = openLines
     .filter((line) => /^\|\s*R\d+\s*\|/.test(line))
     .map((line) => {

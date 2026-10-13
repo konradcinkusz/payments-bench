@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="YamlDotNet" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\PaymentsBench.Api\PaymentsBench.Api.csproj" />
+    <ProjectReference Include="..\..\src\PaymentsBench.PartnerSimulator\PaymentsBench.PartnerSimulator.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Shared with tests/PaymentsBench.Integration.Tests, not copied: one PostgreSQL resolver (the
+         PAYMENTSBENCH_TEST_POSTGRES variable, else Testcontainers) and one fresh-database fixture. -->
+    <Compile Include="..\PaymentsBench.Integration.Tests\PostgresServer.cs" Link="Shared\PostgresServer.cs" />
+    <Compile Include="..\PaymentsBench.Integration.Tests\PostgresFixture.cs" Link="Shared\PostgresFixture.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\scenarios\**\*.yaml" Link="scenarios\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+</Project>
