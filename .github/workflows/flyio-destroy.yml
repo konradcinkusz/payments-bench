@@ -1,0 +1,87 @@
+name: Fly.io destroy
+
+# Manual teardown of the estate, behind a typed confirmation. Reverse dependency order, so nothing
+# keeps serving requests against an app that has already gone: api, partner, authservice, postgres.
+# The PostgreSQL volume is KEPT by default: without `delete_volume` the postgres machine is
+# destroyed but the app and its volume stay, and the next tag redeploys onto the same data.
+#
+# Guarded like deploy.yml: without FLY_API_TOKEN it writes a summary and finishes green.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "destroy payments-bench" to confirm'
+        required: true
+        type: string
+      delete_volume:
+        description: Also destroy the PostgreSQL app and its volume (data is lost)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  FLYCTL_VERSION: '0.3.200'
+  FLYCTL_SHA256: c174cbb0f245ce820a1c2da63db6d3248ab34cdb58016fb756e1c3eb0f13f2dc
+
+jobs:
+  destroy:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      CONFIRM: ${{ inputs.confirm }}
+      DELETE_VOLUME: ${{ inputs.delete_volume }}
+    steps:
+      - name: Check the confirmation
+        run: |
+          if [ "$CONFIRM" != "destroy payments-bench" ]; then
+            echo "::error::confirmation text does not match; nothing was destroyed"
+            exit 1
+          fi
+      - name: Check for a Fly token
+        id: guard
+        run: |
+          if [ -n "${FLY_API_TOKEN:-}" ]; then echo "enabled=true" >> "$GITHUB_OUTPUT"; else echo "enabled=false" >> "$GITHUB_OUTPUT"; fi
+      - name: Summary (no FLY_API_TOKEN)
+        if: steps.guard.outputs.enabled != 'true'
+        run: |
+          {
+            echo "### Fly.io destroy: skipped"
+            echo
+            echo "Would have destroyed, in order: payments-bench-api, payments-bench-partner, payments-bench-authservice, and the payments-bench-postgres machine (volume kept unless requested)."
+            echo "Skipped because \`FLY_API_TOKEN\` is not set in the \`production\` environment. Nothing failed."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Install flyctl
+        if: steps.guard.outputs.enabled == 'true'
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/flyctl.tgz" "https://github.com/superfly/flyctl/releases/download/v${FLYCTL_VERSION}/flyctl_${FLYCTL_VERSION}_Linux_x86_64.tar.gz"
+          echo "${FLYCTL_SHA256}  $RUNNER_TEMP/flyctl.tgz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/flyctl.tgz" -C "$RUNNER_TEMP" flyctl
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Destroy in reverse dependency order
+        if: steps.guard.outputs.enabled == 'true'
+        run: |
+          set -euo pipefail
+          exists() { flyctl apps list --json | jq -e --arg a "$1" '.[] | select((.Name // .name) == $a)' >/dev/null; }
+          for app in payments-bench-api payments-bench-partner payments-bench-authservice; do
+            if exists "$app"; then flyctl apps destroy "$app" --yes; else echo "$app does not exist"; fi
+          done
+          app=payments-bench-postgres
+          if ! exists "$app"; then
+            echo "$app does not exist"
+          elif [ "$DELETE_VOLUME" = true ]; then
+            flyctl apps destroy "$app" --yes
+          else
+            # Keep the app and its volume: destroy only the machines.
+            for id in $(flyctl machine list --app "$app" --json | jq -r '.[].id'); do
+              flyctl machine destroy "$id" --app "$app" --force
+            done
+            echo "### Postgres volume kept" >> "$GITHUB_STEP_SUMMARY"
+          fi

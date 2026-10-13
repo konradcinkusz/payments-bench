@@ -1,0 +1,57 @@
+# payments-bench-authservice: this estate's own instance of the shared identity service
+# (shared-service-reuse: own compute, own database, own signing key). It is NOT built here: it
+# deploys from the pinned image published by konradcinkusz/authservice, never :latest, and its
+# source is never vendored or modified.
+#
+# Secrets (set by the pipeline, never in this file; names only, see docs/DEPLOYMENT.md):
+#   ConnectionStrings__DefaultConnection   the `authservice` database on payments-bench-postgres
+#   Jwt__PrivateKeyPem                     RS256 signing key (PKCS#8, 2048-bit); generated once
+
+app = "payments-bench-authservice"   # globally unique across all of Fly: <consumer>-<service>
+primary_region = "fra"               # same region as the database and the API
+
+[build]
+  # Pinned. A new version is a reviewed change to this line, not a pull of whatever is latest.
+  image = "ghcr.io/konradcinkusz/authservice:v0.3.4"
+
+[env]
+  ASPNETCORE_ENVIRONMENT = "Production"
+  ASPNETCORE_URLS = "http://+:8080"     # all interfaces; must equal internal_port below
+  DATABASE_PROVIDER = "PostgreSQL"
+  # Migrate, not the EnsureCreated default: this database is kept. Needs the migrations assembly.
+  Database__SchemaMode = "Migrate"
+  Database__MigrationsAssembly = "AuthService.Migrations.PostgreSQL"
+  # RS256 only: exactly one service holds a signing key and everyone else validates its JWKS.
+  Jwt__Algorithm = "RS256"
+  # Product-specific, not the `AuthService` default, so a token from another product's instance
+  # cannot authenticate here. The API's Auth__Issuer / Auth__Audience must equal these.
+  Jwt__Issuer = "PaymentsBench"
+  Jwt__Audience = "PaymentsBench"
+  # This app's public https origin: what the discovery document and jwks_uri are built from.
+  Jwt__PublicBaseUrl = "https://payments-bench-authservice.fly.dev"
+
+[http_service]
+  internal_port = 8080              # must equal the port the process binds
+  force_https = true                # tokens and passwords never travel in clear
+  auto_stop_machines = "stop"       # beyond the minimum, the proxy may stop idle machines
+  auto_start_machines = true        # and start one on demand
+  # 1, not 0: every validator fetches the JWKS from here on its first request and again whenever
+  # its cache expires, so this app is on the synchronous path of the API. A scaled-to-zero
+  # identity service turns a cache expiry into a failed payment request.
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 250                # the proxy queues past this
+    soft_limit = 200                # the proxy prefers another machine past this
+
+  [[http_service.checks]]
+    path = "/health/ready"          # readiness: 503 until the schema is initialised and the database answers
+    interval = "30s"                # probe period
+    timeout = "5s"                  # slower than this counts as failed
+    grace_period = "60s"            # schema initialisation runs after the listener is up
+    method = "GET"
+
+[[vm]]
+  size = "shared-cpu-1x"            # the smallest shared CPU
+  memory = "512mb"                  # the reference size in authservice's own deployment notes
