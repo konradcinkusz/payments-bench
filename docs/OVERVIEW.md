@@ -536,11 +536,13 @@ cd docs/papers && latexmk -pdf payments-bench-overview.tex
 
 ## 21. Getting the site
 
-A generated static one-pager served from `docs/` by GitHub Pages is planned as slices C5 and C6 in
-[`plans/stream-c-docs.md`](plans/stream-c-docs.md). The page itself does not exist yet; this section
-will say where it is once it has merged.
+The site is a single generated page, `docs/index.html`, built by `scripts/site-build.mjs` from
+`docs/site/source.html`, `docs/site/style.css` and `docs/site/status.json`, plus facts read from the
+register, the scenarios, the ADRs and the findings. It loads no external resource and opens from
+`file://`. Regenerate it with `npm run site:build`; `npm run site:check` fails CI when the committed
+page is stale (ADR 0005, ADR 0006).
 
-The publishing half is on `main`: `.github/workflows/deploy-pages.yml` uploads `docs/` to Pages on a
+It is published by `.github/workflows/deploy-pages.yml`, which uploads `docs/` to Pages on a
 push to `main` that touches `docs/`, and on demand. It needs one step by hand that no API can
 perform: **Settings > Pages > Build and deployment > Source = GitHub Actions**. Until that is set,
 the workflow fails (`configure-pages` with "Get Pages site failed", then the deploy job with a

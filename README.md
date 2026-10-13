@@ -85,7 +85,7 @@ curl localhost:5100/payments/<id>/ledger
 | **Decisions already taken** | [`docs/adr/`](docs/adr/): one record each. |
 | **How the documentation is published** | [`docs/DEPLOYMENT-DOCS.md`](docs/DEPLOYMENT-DOCS.md), including the one manual GitHub Pages step. |
 | **A PDF edition of the overview** | [`docs/papers/payments-bench-overview.tex`](docs/papers/payments-bench-overview.tex), built on demand by the *Build Overview PDF* workflow and never committed: [OVERVIEW section 20](docs/OVERVIEW.md#20-getting-the-pdf) says how to get it. |
-| **The site** | Planned, not available: see [`docs/plans/stream-c-docs.md`](docs/plans/stream-c-docs.md). |
+| **The site** | [`docs/index.html`](docs/index.html): one generated page with the argument, the numbers and the register, no external resource, opens from `file://`. It is published to GitHub Pages once the setting in [`docs/DEPLOYMENT-DOCS.md`](docs/DEPLOYMENT-DOCS.md) is made; until then, open the file locally. |
 
 ## What is built, and what has never run
 
@@ -129,11 +129,13 @@ docs/                               architecture, the register, decision records
   START-HERE.md  OVERVIEW.md  FINDINGS.md  ARCHITECTURE.md  REGISTER.md
   DIAGRAMS.md                       six Mermaid diagrams, each also a file in diagrams/
   DEPLOYMENT-DOCS.md                how the documentation is published
+  index.html                        the generated site (npm run site:build)
+  site/                             its source, stylesheet and facts file
   papers/                           LaTeX edition of OVERVIEW.md, built to PDF on demand
   adr/                              decision records
   plans/                            the three streams of planned work
-scripts/                            documentation tooling (link check, diagram render and check, LaTeX source check)
-package.json                        documentation tooling only: markdownlint, link check, diagram check and papers check, nothing .NET depends on it
+scripts/                            documentation tooling (link check, diagram render and check, LaTeX source check, site generator)
+package.json                        documentation tooling only: markdownlint, link check, diagram check, papers check and the site generator, nothing .NET depends on it
 .github/workflows/                  CI, the PDF build, the Pages deploy
 ```
 
