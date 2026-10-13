@@ -1,0 +1,45 @@
+sequenceDiagram
+    participant C as Client
+    participant A as API
+    participant H as SubmitPaymentHandler
+    participant S as Store, IOutbox, IUnitOfWork
+    participant G as HttpPartnerGateway
+    participant P as partner simulator (simulated bank)
+
+    C->>A: POST /payments/id/submit
+    A->>H: HandleAsync(SubmitPayment)
+    H->>S: MarkSubmitted, enqueue PaymentSubmitted
+    H->>S: CommitAsync (Submitted is durable)
+    H->>G: SubmitAsync(PartnerTransfer)
+    G->>P: POST /transfers (sent once, never retried)
+    alt Accepted
+        P-->>G: 2xx with partner reference
+        G-->>H: SubmitOutcome.Accepted
+        H->>S: MarkAccepted, enqueue event, CommitAsync
+    else Rejected
+        P-->>G: 422 with reason code
+        G-->>H: SubmitOutcome.Rejected
+        H->>S: MarkRejected, Postings.Release, enqueue event, CommitAsync
+    else Unknown
+        P--xG: timeout, dropped connection or 5xx
+        G-->>H: SubmitOutcome.Unknown
+        Note over H,S: Nothing is written. The payment stays Submitted.
+    end
+    A-->>C: payment as it now stands
+
+    Note over C,P: Later, recovery of a payment still Submitted
+    C->>A: POST /payments/id/resolve
+    A->>H: ResolveSubmittedPaymentHandler.HandleAsync
+    H->>G: GetStatusAsync(end-to-end id)
+    G->>P: GET /transfers/end-to-end id (idempotent, retried)
+    alt NotFound
+        P-->>G: 404
+        G-->>H: PartnerStatus.NotFound
+        H->>G: SubmitAsync with the same end-to-end id
+        G->>P: POST /transfers
+        P-->>G: Accepted or Rejected
+        H->>S: MarkAccepted or MarkRejected plus Postings.Release, CommitAsync
+    else Accepted, Settled or Rejected
+        P-->>G: status
+        H->>S: apply it (Settled posts Postings.Settle, Rejected posts Postings.Release), CommitAsync
+    end
