@@ -2,6 +2,7 @@ sequenceDiagram
     participant C as Client
     participant A as API
     participant H as SubmitPaymentHandler
+    participant R as ResolveSubmittedPaymentHandler
     participant S as Store, IOutbox, IUnitOfWork
     participant G as HttpPartnerGateway
     participant P as partner simulator (simulated bank)
@@ -29,17 +30,26 @@ sequenceDiagram
 
     Note over C,P: Later, recovery of a payment still Submitted
     C->>A: POST /payments/id/resolve
-    A->>H: ResolveSubmittedPaymentHandler.HandleAsync
-    H->>G: GetStatusAsync(end-to-end id)
-    G->>P: GET /transfers/end-to-end id (idempotent, retried)
+    A->>R: HandleAsync(ResolveSubmittedPayment)
+    R->>G: GetStatusAsync(end-to-end id)
+    G->>P: GET /transfers/end-to-end id (idempotent, retried on 5xx only, see F-5)
     alt NotFound
         P-->>G: 404
-        G-->>H: PartnerStatus.NotFound
-        H->>G: SubmitAsync with the same end-to-end id
+        G-->>R: PartnerStatus.NotFound
+        R->>G: SubmitAsync with the same end-to-end id
         G->>P: POST /transfers
-        P-->>G: Accepted or Rejected
-        H->>S: MarkAccepted or MarkRejected plus Postings.Release, CommitAsync
+        alt resubmit Accepted or Rejected
+            P-->>G: 2xx or 422
+            R->>S: MarkAccepted, or MarkRejected plus Postings.Release, CommitAsync
+        else resubmit Unknown (F-3)
+            P--xG: timeout, dropped connection or 5xx
+            G-->>R: SubmitOutcome.Unknown
+            Note over R,S: Nothing is written. Returns SafeToResubmit, payment stays Submitted.
+        end
     else Accepted, Settled or Rejected
         P-->>G: status
-        H->>S: apply it (Settled posts Postings.Settle, Rejected posts Postings.Release), CommitAsync
+        R->>S: apply it (Settled posts Postings.Settle, Rejected posts Postings.Release), CommitAsync
+    else Returned
+        P-->>G: status Returned
+        R-->>A: refused with an error, nothing written
     end

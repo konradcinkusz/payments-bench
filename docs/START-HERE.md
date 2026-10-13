@@ -51,6 +51,8 @@ something or learning something, and do you need steps or understanding?
 ### Reference: "I need the exact facts"
 
 - [**REGISTER.md**](REGISTER.md): what is not proved, with dates and closing conditions.
+- [**DIAGRAMS.md**](DIAGRAMS.md): six Mermaid diagrams (money path, state machine, submit and resolve,
+  outbox and inbox, reconciliation, delivery topology), each beside the code it reflects.
 - [**adr/**](adr/): decisions already taken, one record each.
 - [**scenarios/README.md**](../scenarios/README.md): the scenario classes and what each proves.
 - The state machine is one table, `PaymentTransitions` in
