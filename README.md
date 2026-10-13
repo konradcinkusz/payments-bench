@@ -25,9 +25,15 @@ status, `/health` and `/alive`, OTLP export when `OTEL_EXPORTER_OTLP_ENDPOINT` i
 ## Run it
 
 ```bash
-dotnet test                                   # 37 tests, no database needed
+dotnet test                                   # 63 tests; the 26 integration tests need PostgreSQL (see below)
 dotnet run --project src/PaymentsBench.AppHost   # Aspire: PostgreSQL + simulator + API + dashboard
 ```
+
+The integration tests (`tests/PaymentsBench.Integration.Tests`) find a database in one of two ways:
+with Docker running they start a `postgres:16-alpine` Testcontainers container; otherwise set
+`PAYMENTSBENCH_TEST_POSTGRES` to a server that trusts you, for example
+`PAYMENTSBENCH_TEST_POSTGRES="Host=localhost;Port=5432;Username=postgres" dotnet test`. Each test
+class gets its own throwaway database. With neither, they fail with a message saying so; they are never skipped.
 
 Or without Aspire, in memory, two terminals:
 
