@@ -41,7 +41,7 @@ Each figure names the file it was measured in; the measurements were taken on `m
 ## Run it
 
 ```bash
-dotnet test                                   # 37 tests, no database needed
+dotnet test                                   # 72 tests, no database needed
 dotnet run --project src/PaymentsBench.AppHost   # Aspire: PostgreSQL + simulator + API + dashboard
 ```
 
