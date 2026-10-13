@@ -26,7 +26,7 @@ catches the second at commit, as a raw `DbUpdateException`.
   cannot reliably tell, inside a failed scope, whether the winner stored the same request body, and
   replaying a response from a half-failed scope would need a second read path in the unit of work.
   The client re-reads or retries the same request, and the retry takes the normal replay path. This
-  trades one extra round trip on a rare race for a simple, uniform rule. Recorded as register row R14.
+  trades one extra round trip on a rare race for a simple, uniform rule. Recorded as register row R17.
 
 ## Consequences
 
