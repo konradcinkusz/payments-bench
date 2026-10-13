@@ -1,0 +1,25 @@
+{
+  "name": "payments-bench-tooling",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Repository tooling for documentation only: Markdown lint, link checking and diagram rendering. This is a .NET repository; nothing here ships or is referenced by any project.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "lint": "npm run lint:md && npm run lint:links && npm run lint:diagrams && npm run lint:papers",
+    "lint:md": "markdownlint-cli2",
+    "lint:links": "node scripts/check-links.mjs",
+    "lint:diagrams": "node scripts/check-diagrams.mjs",
+    "render:diagrams": "node scripts/render-diagrams.mjs",
+    "lint:papers": "node scripts/check-papers.mjs",
+    "site:build": "node scripts/site-build.mjs",
+    "site:check": "node scripts/site-build.mjs --check"
+  },
+  "devDependencies": {
+    "@mermaid-js/mermaid-cli": "11.16.0",
+    "markdownlint-cli2": "0.23.2"
+  }
+}

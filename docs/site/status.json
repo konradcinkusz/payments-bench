@@ -1,0 +1,53 @@
+{
+  "repository": {
+    "value": "https://github.com/konradcinkusz/payments-bench",
+    "source": "README.md",
+    "asOf": "2026-10-13"
+  },
+  "tests": {
+    "domain": {
+      "value": 15,
+      "source": "tests/PaymentsBench.Domain.Tests",
+      "asOf": "2026-10-13"
+    },
+    "application": {
+      "value": 22,
+      "source": "tests/PaymentsBench.Application.Tests",
+      "asOf": "2026-10-13"
+    }
+  },
+  "mergedPullRequests": {
+    "value": [
+      {
+        "number": 1,
+        "title": "Plan stream B: platform, delivery, identity"
+      },
+      {
+        "number": 2,
+        "title": "Stream C plan: documentation, overview, PDF and site"
+      },
+      {
+        "number": 3,
+        "title": "Plan stream A: core and correctness"
+      },
+      {
+        "number": 4,
+        "title": "Docs tooling: markdownlint, link check, docs lint job"
+      },
+      {
+        "number": 6,
+        "title": "Docs: OVERVIEW, FINDINGS and START-HERE"
+      },
+      {
+        "number": 7,
+        "title": "Diagrams: six Mermaid sources, render and check scripts, DIAGRAMS.md"
+      },
+      {
+        "number": 15,
+        "title": "PDF edition of the overview: house preamble, check-papers, Build Overview PDF workflow"
+      }
+    ],
+    "source": "docs/plans",
+    "asOf": "2026-10-13"
+  }
+}

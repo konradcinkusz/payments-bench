@@ -1,0 +1,14 @@
+flowchart LR
+    CF["customer-funds<br/>LedgerAccounts.CustomerFunds"]
+    PO["pending-outbound<br/>LedgerAccounts.PendingOutbound"]
+    NO["nostro<br/>LedgerAccounts.Nostro"]
+
+    CF -- "initiate: Postings.Reserve<br/>debit customer-funds, credit pending-outbound" --> PO
+    PO -- "reject: Postings.Release<br/>debit pending-outbound, credit customer-funds" --> CF
+    PO -- "settle: Postings.Settle<br/>debit pending-outbound, credit nostro" --> NO
+    NO -- "return: Postings.Reverse<br/>debit nostro, credit customer-funds" --> CF
+
+    T1["InitiatePaymentHandler<br/>status Initiated"] -.-> CF
+    T2["Rejected, from SubmitPaymentHandler,<br/>ResolveSubmittedPaymentHandler<br/>or a Rejected notification"] -.-> PO
+    T3["Settled, from ResolveSubmittedPaymentHandler<br/>or a Settled notification"] -.-> PO
+    T4["Returned, from a Returned notification<br/>only after Settled"] -.-> NO

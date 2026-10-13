@@ -27,3 +27,28 @@ jobs:
         with:
           name: test-results
           path: '**/TestResults/*.trx'
+
+  lint-docs:
+    name: Lint documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install lint tooling
+        run: npm ci
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+      - name: markdownlint
+        run: npm run lint:md
+      - name: Check relative links
+        run: npm run lint:links
+      - name: Check diagrams
+        run: npm run lint:diagrams
+      - name: Check papers
+        run: npm run lint:papers
+      - name: Check the generated site is current
+        run: npm run site:check
