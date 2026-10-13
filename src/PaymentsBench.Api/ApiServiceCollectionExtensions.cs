@@ -34,6 +34,7 @@ public static class ApiServiceCollectionExtensions
         app.UseStatusCodePages();
         app.MapOpenApi().AllowAnonymousInDevelopment(app.Environment);
         app.MapPaymentsEndpoints();
+        app.MapPain001Endpoints();
         app.MapPartnerNotificationEndpoints();
         app.MapReconciliationEndpoints();
         app.MapLedgerEndpoints();

@@ -22,3 +22,10 @@ public sealed record PaymentListView(IReadOnlyList<PaymentView> Items, int Page,
         page.Total,
         Enum.GetValues<PaymentStatus>().ToDictionary(s => s.ToString(), s => page.CountsByStatus.GetValueOrDefault(s)));
 }
+
+/// <summary>One transaction of a pain.001 document: the payment it became, or the problem that stopped it.</summary>
+public sealed record Pain001TransactionView(string EndToEndId, Guid? PaymentId, string? Status, ProblemView? Problem);
+
+public sealed record ProblemView(int Status, string Title, string Detail);
+
+public sealed record Pain001ResultView(IReadOnlyList<Pain001TransactionView> Transactions);

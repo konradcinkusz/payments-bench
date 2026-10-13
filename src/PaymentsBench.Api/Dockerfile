@@ -11,6 +11,7 @@ COPY global.json Directory.Build.props Directory.Packages.props ./
 COPY src/PaymentsBench.Domain/PaymentsBench.Domain.csproj src/PaymentsBench.Domain/
 COPY src/PaymentsBench.Application/PaymentsBench.Application.csproj src/PaymentsBench.Application/
 COPY src/PaymentsBench.Infrastructure/PaymentsBench.Infrastructure.csproj src/PaymentsBench.Infrastructure/
+COPY src/PaymentsBench.Iso20022/PaymentsBench.Iso20022.csproj src/PaymentsBench.Iso20022/
 COPY src/PaymentsBench.ServiceDefaults/PaymentsBench.ServiceDefaults.csproj src/PaymentsBench.ServiceDefaults/
 COPY src/PaymentsBench.Api/PaymentsBench.Api.csproj src/PaymentsBench.Api/
 RUN dotnet restore src/PaymentsBench.Api/PaymentsBench.Api.csproj
