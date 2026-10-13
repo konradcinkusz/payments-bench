@@ -30,6 +30,17 @@ The recovery has to run by itself, and running it by itself must not weaken the 
    resubmits, and that resubmit's own outcome is unknown, the resolver now returns
    `ResolutionOutcome.StillUnknown`, not `SafeToResubmit`. Nothing is written; the next sweep asks
    again. The sweep counts it under that tag instead of mistaking it for a resolution.
+1. **`PartnerUnavailable` is its own outcome (the resolve-during-open-circuit defect, stream B R16).**
+   Failed submits trip the circuit breaker that `HttpPartnerGateway.GetStatusAsync` shares, and the
+   lookup did not catch `BrokenCircuitException` (or a timeout or other transport failure), so
+   `POST /payments/{id}/resolve` returned 500 and the sweeper would have hit the same exception.
+   The gateway now maps an open circuit, timeouts, transport failures and 5xx answers to
+   `PartnerStatus.Unavailable`, never to `NotFound`, because "no record" is the one answer that
+   permits a resubmit. The resolver returns `ResolutionOutcome.PartnerUnavailable`, writes nothing and
+   leaves the payment Submitted. The API answers **200 with that outcome**, like `StillUnknown`, not a 503:
+   the request itself succeeded and the payment is in a defined, unchanged state; a 5xx would read
+   as "this service is broken" and invite blind client retries against an open breaker, whereas
+   the outcome name tells the caller to ask again later. The sweep counts it under that tag.
 1. **`SubmittedPaymentSweeper`** is a `BackgroundService` in `Infrastructure/Sweeping/`. It awaits
    `MigrationGate` ([ADR 0008](0008-schema-migrated-by-a-hosted-service-behind-a-gate.md)), sweeps
    once at start and then every `Interval`, and is registered for both storage modes. Options are
@@ -53,7 +64,7 @@ The recovery has to run by itself, and running it by itself must not weaken the 
      payment; the age is read live, so a sweeper that stops makes the gauge climb instead of
      freezing.
    - `payments.sweep.resolved`, a counter with tag `outcome`: the `ResolutionOutcome` name
-     (`Accepted`, `Settled`, `Rejected`, `StillUnknown`, `AlreadyResolved`) or `failed`.
+     (`Accepted`, `Settled`, `Rejected`, `StillUnknown`, `PartnerUnavailable`, `AlreadyResolved`) or `failed`.
 1. **The alert.** Page when `payments.submitted.oldest_age_seconds` is above
    `10 x Sweeper:Interval + Sweeper:MinimumAge` for 5 minutes. With the defaults that is
    10 x 30 s + 60 s = 360 s. Why these numbers:
@@ -63,7 +74,7 @@ The recovery has to run by itself, and running it by itself must not weaken the 
      larger than one batch draining at `BatchSize` per interval) before anyone is woken.
    - The 5-minute hold keeps a single slow partner answer, or a deploy that restarts the sweeper,
      from paging. A payment that really is stuck stays above the line and pages within minutes.
-   - `payments.sweep.resolved{outcome="failed"}` or `{outcome="StillUnknown"}` rising while the gauge
+   - `payments.sweep.resolved{outcome="failed"}` or `{outcome="StillUnknown"}` or `{outcome="PartnerUnavailable"}` rising while the gauge
      is high means the sweeper runs but the partner does not answer; a flat counter and a high
      gauge means the sweeper is not running (check `Sweeper:Enabled` and the migration gate).
    - If an operator changes `Interval` or `MinimumAge`, the threshold changes with them; it is
@@ -73,7 +84,7 @@ The recovery has to run by itself, and running it by itself must not weaken the 
 
 - R8 closes: payments left at Submitted resolve without a person, and the age of the oldest one is
   observable. The rule in ADR 0001 is unchanged and now covered by a test that drives the sweep.
-- Payments are taken oldest first. A payment that stays `StillUnknown` or failing keeps its
+- Payments are taken oldest first. A payment that stays `StillUnknown`, `PartnerUnavailable` or failing keeps its
   `UpdatedAt`, stays at the front, and is retried every sweep. If more than `BatchSize` payments are
   stuck this way they starve younger ones. That is visible on the alert, and it is open as a
   register row.

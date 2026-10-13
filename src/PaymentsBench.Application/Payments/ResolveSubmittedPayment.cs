@@ -24,6 +24,13 @@ public enum ResolutionOutcome
     /// payment stays Submitted and the next resolve asks the partner again.
     /// </summary>
     StillUnknown = 5,
+
+    /// <summary>
+    /// The partner could not be asked (open circuit, timeout, transport failure), so nothing is known
+    /// and nothing is written. The payment stays Submitted and a later resolve or sweep asks again.
+    /// It is never treated as "no record": a resubmit here could duplicate the transfer.
+    /// </summary>
+    PartnerUnavailable = 6,
 }
 
 /// <summary>
@@ -73,6 +80,8 @@ public sealed class ResolveSubmittedPaymentHandler(
                 }
 
                 break;
+            case PartnerStatus.Unavailable:
+                return ResolutionOutcome.PartnerUnavailable;
             case PartnerStatus.Accepted:
                 payment.MarkAccepted(status.PartnerReference ?? payment.EndToEndId, now);
                 outcome = ResolutionOutcome.Accepted;

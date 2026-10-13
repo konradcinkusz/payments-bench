@@ -103,6 +103,26 @@ public class SubmitAndResolveTests
     }
 
     [Fact]
+    public async Task An_unavailable_partner_leaves_the_payment_submitted_and_is_never_a_resubmit()
+    {
+        var host = new TestHost();
+        var payment = await host.Initiate.HandleAsync(TestHost.Command(), CancellationToken.None);
+        host.Partner.SubmitAnswers.Enqueue(new SubmitResult(SubmitOutcome.Unknown, null, "TimeoutRejectedException"));
+        await host.Submit.HandleAsync(new SubmitPayment(payment.Id), CancellationToken.None);
+        var commitsBefore = host.UnitOfWork.Commits;
+        var eventsBefore = host.Outbox.Events.Count;
+        host.Partner.StatusAnswers.Enqueue(new PartnerStatusResult(PartnerStatus.Unavailable, null, "BrokenCircuitException", null));
+
+        var outcome = await host.Resolve.HandleAsync(new ResolveSubmittedPayment(payment.Id), CancellationToken.None);
+
+        Assert.Equal(ResolutionOutcome.PartnerUnavailable, outcome);
+        Assert.Equal(PaymentStatus.Submitted, (await host.Payments.GetAsync(payment.Id, CancellationToken.None))!.Status);
+        Assert.Single(host.Partner.Submits);
+        Assert.Equal(commitsBefore, host.UnitOfWork.Commits);
+        Assert.Equal(eventsBefore, host.Outbox.Events.Count);
+    }
+
+    [Fact]
     public async Task Resolving_a_payment_that_is_not_submitted_does_nothing()
     {
         var host = new TestHost();

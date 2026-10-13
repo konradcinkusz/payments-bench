@@ -166,6 +166,23 @@ public sealed class SweepSubmittedPaymentsTests
     }
 
     [Fact]
+    public async Task An_unavailable_partner_is_counted_under_its_own_outcome_and_nothing_is_resubmitted()
+    {
+        var sweep = new SweepHost();
+        var id = await sweep.SubmitUnknownAsync("a");
+        sweep.Host.Clock.UtcNow += TimeSpan.FromMinutes(2);
+        sweep.Host.Partner.StatusAnswers.Enqueue(new PartnerStatusResult(PartnerStatus.Unavailable, null, "BrokenCircuitException", null));
+        using var metrics = new MetricsProbe(sweep.MeterFactory);
+
+        var result = await sweep.Sweeper.SweepOnceAsync(CancellationToken.None);
+
+        Assert.Equal(PaymentStatus.Submitted, await sweep.StatusOfAsync(id));
+        Assert.Equal(1, result.Outcomes[ResolutionOutcome.PartnerUnavailable]);
+        Assert.Equal(1, metrics.Resolved("PartnerUnavailable"));
+        Assert.Single(sweep.Host.Partner.Submits);
+    }
+
+    [Fact]
     public async Task A_sweep_is_an_activity_on_the_payments_bench_source()
     {
         var sweep = new SweepHost();

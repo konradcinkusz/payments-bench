@@ -25,6 +25,13 @@ public enum PartnerStatus
     Settled = 2,
     Rejected = 3,
     Returned = 4,
+
+    /// <summary>
+    /// The lookup did not complete: the circuit is open, the call timed out, the connection failed or the
+    /// partner answered 5xx. Nothing is known about the transfer, so this is never <see cref="NotFound"/>:
+    /// the only safe next step is to ask again later, not to resubmit.
+    /// </summary>
+    Unavailable = 5,
 }
 
 public sealed record PartnerStatusResult(PartnerStatus Status, string? PartnerReference, string? ReasonCode, DateOnly? ValueDate);

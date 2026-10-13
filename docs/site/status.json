@@ -11,7 +11,7 @@
       "asOf": "2026-10-13"
     },
     "application": {
-      "value": 64,
+      "value": 74,
       "source": "tests/PaymentsBench.Application.Tests",
       "asOf": "2026-10-13"
     },
