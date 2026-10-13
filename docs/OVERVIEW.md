@@ -483,6 +483,9 @@ open as a statement of scope.
 | [0001](adr/0001-no-blind-resubmit.md) | An unknown submit outcome is never retried blind; the resolver asks the partner and resubmits only on `NotFound`. |
 | [0002](adr/0002-double-entry-ledger.md) | Money is a double-entry, append-only ledger; balances are derived. |
 | [0003](adr/0003-reconciliation-produces-a-work-queue.md) | Reconciliation produces breaks, not alerts. |
+| [0004](adr/0004-the-overview-pdf-is-built-on-demand.md) | The overview PDF is built on demand, on pull requests touching its sources, and on tags; never committed. |
+| [0005](adr/0005-the-documentation-site-is-generated.md) | The documentation site is generated from one source and one facts file, and checked for staleness in CI. |
+| [0006](adr/0006-the-site-loads-no-external-resource.md) | The site loads no external resource and works from `file://`. |
 
 ## 18. Non-goals
 
@@ -534,5 +537,11 @@ cd docs/papers && latexmk -pdf payments-bench-overview.tex
 ## 21. Getting the site
 
 A generated static one-pager served from `docs/` by GitHub Pages is planned as slices C5 and C6 in
-[`plans/stream-c-docs.md`](plans/stream-c-docs.md). It does not exist yet; this section will say
-where it is once it has merged.
+[`plans/stream-c-docs.md`](plans/stream-c-docs.md). The page itself does not exist yet; this section
+will say where it is once it has merged.
+
+The publishing half is on `main`: `.github/workflows/deploy-pages.yml` uploads `docs/` to Pages on a
+push to `main` that touches `docs/`, and on demand. It needs one step by hand that no API can
+perform: **Settings > Pages > Build and deployment > Source = GitHub Actions**. Until that is set,
+the deploy job fails with a "Pages not enabled" error. [`DEPLOYMENT-DOCS.md`](DEPLOYMENT-DOCS.md)
+has the detail.
