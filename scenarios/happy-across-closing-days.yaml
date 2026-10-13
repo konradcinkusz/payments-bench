@@ -1,0 +1,32 @@
+id: happy-across-closing-days
+class: happy
+description: >
+  A SEPA transfer submitted on Thursday 24 December 2026 settles across the TARGET2 closing days
+  (Christmas Day, Boxing Day, the weekend) on Monday 28 December, and the statement agrees.
+clock: 2026-12-24T10:00:00Z
+partner:
+  fault: none
+steps:
+  - initiate:
+      idempotencyKey: xmas-1
+      endToEndId: E2E-XMAS-1
+      amount: 80.00
+      currency: EUR
+      scheme: sepa
+  - submit: E2E-XMAS-1
+  - partnerSettles:
+      endToEndId: E2E-XMAS-1
+      valueDate: next-business-day
+  - notify:
+      notificationId: N-XMAS-1
+      endToEndId: E2E-XMAS-1
+      kind: Settled
+  - reconcile: value-date
+expect:
+  status: Settled
+  valueDate: 2026-12-28
+  ledger:
+    pending-outbound: 0.00
+    nostro: -80.00
+  reconciliation:
+    breaks: 0

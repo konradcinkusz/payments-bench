@@ -1,0 +1,26 @@
+id: ledger-only-break
+class: reconciliation
+description: >
+  We settled a payment on the partner's word, but the partner's statement for that day does not
+  carry it. Reconciliation reports one InLedgerOnly break for that id and nothing else.
+partner:
+  fault: none
+steps:
+  - initiate:
+      idempotencyKey: lonly-1
+      endToEndId: E2E-LONLY-1
+      amount: 60.00
+      currency: EUR
+      scheme: sepa
+  - submit: E2E-LONLY-1
+  - notify:
+      notificationId: N-LONLY-1
+      endToEndId: E2E-LONLY-1
+      kind: Settled
+      valueDate: next-business-day
+  - reconcile: value-date
+expect:
+  status: Settled
+  reconciliation:
+    breaks: 1
+    kinds: [InLedgerOnly]

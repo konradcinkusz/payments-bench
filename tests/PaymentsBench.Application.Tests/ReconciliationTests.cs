@@ -50,6 +50,34 @@ public class ReconciliationTests
         Assert.Single(report.Breaks, b => b.Kind == BreakKind.InLedgerOnly && b.EndToEndId == "E2E-1");
     }
 
+    [Fact]
+    public async Task A_payment_settled_that_day_and_returned_since_still_matches_its_settlement_line()
+    {
+        var host = new TestHost();
+        await Settled(host, "k-1", "E2E-1", 100m);
+        await host.Notify.HandleAsync(new PartnerNotification("N-RET-E2E-1", "E2E-1", NotificationKind.Returned, "AC04", null), CancellationToken.None);
+        var statement = new Statement(Day, "NOSTRO", [Line("E2E-1", 100m)]);
+
+        var report = await host.ReconcileWith(statement).ReconcileAsync(Day, CancellationToken.None);
+
+        Assert.True(report.IsClean, string.Join(", ", report.Breaks.Select(b => $"{b.Kind}:{b.EndToEndId}")));
+        Assert.Equal(1, report.Matched);
+    }
+
+    [Fact]
+    public async Task A_returned_payment_is_matched_only_on_its_own_value_date()
+    {
+        var host = new TestHost();
+        await Settled(host, "k-1", "E2E-1", 100m);
+        await host.Notify.HandleAsync(new PartnerNotification("N-RET-E2E-1", "E2E-1", NotificationKind.Returned, "AC04", null), CancellationToken.None);
+        var otherDay = Day.AddDays(1);
+
+        var report = await host.ReconcileWith(new Statement(otherDay, "NOSTRO", [])).ReconcileAsync(otherDay, CancellationToken.None);
+
+        Assert.True(report.IsClean);
+        Assert.Equal(0, report.Matched);
+    }
+
     private static StatementLine Line(string endToEndId, decimal amount) => new(endToEndId, amount, "EUR", Day, StatementDirection.Debit);
 
     private static async Task Settled(TestHost host, string key, string endToEndId, decimal amount)
