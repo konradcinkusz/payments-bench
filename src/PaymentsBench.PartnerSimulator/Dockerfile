@@ -12,6 +12,8 @@ COPY src/PaymentsBench.ServiceDefaults/PaymentsBench.ServiceDefaults.csproj src/
 COPY src/PaymentsBench.PartnerSimulator/PaymentsBench.PartnerSimulator.csproj src/PaymentsBench.PartnerSimulator/
 RUN dotnet restore src/PaymentsBench.PartnerSimulator/PaymentsBench.PartnerSimulator.csproj
 COPY src/ src/
+# Scheme and calendar data (rule 7) is linked into the project output from scenarios/.
+COPY scenarios/ scenarios/
 # Warnings-as-errors is the CI gate (ci.yml); the floating sdk:10.0 tag can ship newer analyzers
 # than global.json pins, and a newer analyzer must not make an image unbuildable.
 RUN dotnet publish src/PaymentsBench.PartnerSimulator/PaymentsBench.PartnerSimulator.csproj --configuration Release --no-restore -p:TreatWarningsAsErrors=false --output /app/publish

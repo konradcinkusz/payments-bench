@@ -31,17 +31,54 @@ public sealed class IdempotencyConflictException : DomainException
     }
 }
 
+public sealed class UnknownSchemeException : DomainException
+{
+    public UnknownSchemeException(string scheme)
+        : base($"Unknown scheme '{scheme}'.")
+    {
+    }
+
+    public UnknownSchemeException()
+    {
+    }
+
+    public UnknownSchemeException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+}
+
+public sealed class SchemeCurrencyMismatchException : DomainException
+{
+    public SchemeCurrencyMismatchException(string scheme, string carries, string requested)
+        : base($"Scheme '{scheme}' carries {carries}, not {requested}.")
+    {
+    }
+
+    public SchemeCurrencyMismatchException()
+    {
+    }
+
+    public SchemeCurrencyMismatchException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+}
+
 /// <summary>
 /// Creates a payment once per idempotency key. A replay with the same body returns the original
 /// payment; a replay with a different body is refused. Reserving the funds in the ledger and
-/// enqueuing the event happen in the same unit of work as the insert.
+/// enqueuing the event happen in the same unit of work as the insert. A scheme the catalog does not
+/// know, or a currency it does not carry, is refused before anything is written; a replay of an
+/// existing request is answered first, so it is not affected by later changes to the data.
 /// </summary>
 public sealed class InitiatePaymentHandler(
     IPaymentRepository payments,
     ILedger ledger,
     IOutbox outbox,
     IUnitOfWork unitOfWork,
-    IClock clock)
+    IClock clock,
+    ISchemeCatalog schemes)
 {
     public async Task<Payment> HandleAsync(InitiatePayment command, CancellationToken cancellationToken)
     {
@@ -52,6 +89,12 @@ public sealed class InitiatePaymentHandler(
             return existing.RequestHash == hash
                 ? existing
                 : throw new IdempotencyConflictException(command.IdempotencyKey);
+        }
+
+        var scheme = schemes.Find(command.Scheme) ?? throw new UnknownSchemeException(command.Scheme);
+        if (!string.Equals(scheme.Rules.Currency, command.Currency, StringComparison.Ordinal))
+        {
+            throw new SchemeCurrencyMismatchException(scheme.Rules.Name, scheme.Rules.Currency, command.Currency);
         }
 
         var now = clock.UtcNow;

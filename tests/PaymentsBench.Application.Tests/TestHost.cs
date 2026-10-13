@@ -1,6 +1,8 @@
 using PaymentsBench.Application.Payments;
+using PaymentsBench.Application.Ports;
 using PaymentsBench.Application.Reconciliation;
 using PaymentsBench.Infrastructure.InMemory;
+using PaymentsBench.Infrastructure.Schemes;
 
 namespace PaymentsBench.Application.Tests;
 
@@ -21,9 +23,12 @@ public sealed class TestHost
 
     public NoOpUnitOfWork UnitOfWork { get; } = new();
 
+    /// <summary>The real scheme and calendar files, loaded the way the API loads them.</summary>
+    public ISchemeCatalog Schemes { get; } = SchemeCatalogLoader.Load(Path.Combine(AppContext.BaseDirectory, "scenarios"));
+
     public ScriptedPartner Partner { get; } = new();
 
-    public InitiatePaymentHandler Initiate => new(Payments, Ledger, Outbox, UnitOfWork, Clock);
+    public InitiatePaymentHandler Initiate => new(Payments, Ledger, Outbox, UnitOfWork, Clock, Schemes);
 
     public SubmitPaymentHandler Submit => new(Payments, Partner, Ledger, Outbox, UnitOfWork, Clock);
 
