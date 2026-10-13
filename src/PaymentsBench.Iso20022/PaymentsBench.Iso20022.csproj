@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\PaymentsBench.Application\PaymentsBench.Application.csproj" />
+  </ItemGroup>
+</Project>
