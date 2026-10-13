@@ -45,16 +45,26 @@ public sealed class HttpPartnerGateway(HttpClient client) : IPartnerGateway
 
     public async Task<PartnerStatusResult> GetStatusAsync(string endToEndId, CancellationToken cancellationToken)
     {
-        using var response = await client.GetAsync(new Uri($"/transfers/{Uri.EscapeDataString(endToEndId)}", UriKind.Relative), cancellationToken);
-        if (response.StatusCode == HttpStatusCode.NotFound)
+        try
         {
-            return new PartnerStatusResult(PartnerStatus.NotFound, null, null, null);
-        }
+            using var response = await client.GetAsync(new Uri($"/transfers/{Uri.EscapeDataString(endToEndId)}", UriKind.Relative), cancellationToken);
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                return new PartnerStatusResult(PartnerStatus.NotFound, null, null, null);
+            }
 
-        response.EnsureSuccessStatusCode();
-        var body = await response.Content.ReadFromJsonAsync<PartnerTransferView>(PartnerJson.Options, cancellationToken)
-            ?? throw new HttpRequestException("Partner returned an empty status body.");
-        return new PartnerStatusResult(Enum.Parse<PartnerStatus>(body.Status, ignoreCase: true), body.PartnerReference, body.ReasonCode, body.ValueDate);
+            response.EnsureSuccessStatusCode();
+            var body = await response.Content.ReadFromJsonAsync<PartnerTransferView>(PartnerJson.Options, cancellationToken)
+                ?? throw new HttpRequestException("Partner returned an empty status body.");
+            return new PartnerStatusResult(Enum.Parse<PartnerStatus>(body.Status, ignoreCase: true), body.PartnerReference, body.ReasonCode, body.ValueDate);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or TimeoutRejectedException or BrokenCircuitException
+                                   && !cancellationToken.IsCancellationRequested)
+        {
+            // Failed submits share this client's circuit breaker, so an open circuit lands here too.
+            // Not knowing is not "not found": say Unavailable and let the caller ask again later.
+            return new PartnerStatusResult(PartnerStatus.Unavailable, null, ex.GetType().Name, null);
+        }
     }
 
     private sealed record PartnerAcceptance(string PartnerReference);
