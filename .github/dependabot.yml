@@ -1,0 +1,45 @@
+# Dependency update automation (repo-baseline section 1). Versions are central:
+# Directory.Packages.props for NuGet, pinned tags in workflows and Dockerfiles.
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: 'chore(deps)'
+    groups:
+      nuget:
+        patterns: ['*']
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: 'chore(ci)(deps)'
+    groups:
+      github-actions:
+        patterns: ['*']
+  # Dockerfiles land with the containers slice; Dependabot is a no-op until they exist.
+  - package-ecosystem: docker
+    directory: /src/PaymentsBench.Api
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+    commit-message:
+      prefix: 'chore(docker)(deps)'
+  - package-ecosystem: docker
+    directory: /src/PaymentsBench.PartnerSimulator
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+    commit-message:
+      prefix: 'chore(docker)(deps)'

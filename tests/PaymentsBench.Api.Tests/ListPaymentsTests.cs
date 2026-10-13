@@ -15,13 +15,13 @@ public sealed class ListPaymentsTests : ApiTestBase
 
     private async Task SeedAsync()
     {
-        // 3 SEPA (one submitted) and 2 FPS, created in sequence so order is observable.
-        foreach (var scheme in new[] { "SEPA", "SEPA", "SEPA", "FPS", "FPS" })
+        // 3 sepa (one submitted) and 2 faster-payments, created in sequence so order is observable.
+        foreach (var scheme in new[] { "sepa", "sepa", "sepa", "faster-payments", "faster-payments" })
         {
             await CreatePaymentAsync(scheme);
         }
 
-        var sepa = await ListAsync("?scheme=SEPA");
+        var sepa = await ListAsync("?scheme=sepa");
         var id = sepa.GetProperty("items")[0].GetProperty("id").GetGuid();
         Assert.Equal(HttpStatusCode.OK, (await Client.PostAsync($"/payments/{id}/submit", content: null)).StatusCode);
     }
@@ -87,7 +87,7 @@ public sealed class ListPaymentsTests : ApiTestBase
     {
         await SeedAsync();
 
-        var body = await ListAsync("?scheme=FPS");
+        var body = await ListAsync("?scheme=faster-payments");
 
         Assert.Equal(2, body.GetProperty("total").GetInt32());
         Assert.All(body.GetProperty("items").EnumerateArray(), i => Assert.Equal("Initiated", i.GetProperty("status").GetString()));

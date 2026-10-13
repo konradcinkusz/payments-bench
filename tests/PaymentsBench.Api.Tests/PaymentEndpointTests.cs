@@ -100,6 +100,12 @@ public sealed class PaymentEndpointTests : ApiTestBase
     }
 
     [Fact]
+    public async Task An_unknown_scheme_is_a_422_problem()
+    {
+        AssertProblem(await InitiateAsync(ValidBody(scheme: "no-such-scheme", currency: "EUR")), HttpStatusCode.UnprocessableEntity);
+    }
+
+    [Fact]
     public async Task An_unknown_payment_id_is_a_404_problem_on_every_route_that_takes_one()
     {
         var id = Guid.NewGuid();

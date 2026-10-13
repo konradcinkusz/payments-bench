@@ -1,0 +1,42 @@
+# Fedwire Funds Service (US dollar) business calendar, used here for the swift scheme's USD leg.
+#
+# Source: Federal Reserve Financial Services, "Holiday Schedules" and the Federal Reserve
+# Banks' holiday rule. https://www.frbservices.org/about/holiday-schedules
+# Fedwire is closed on Saturdays and Sundays (the Sunday-evening opening is the start of Monday's
+# business day, not a Sunday business day) and on Federal Reserve holidays.
+#
+# Observed-holiday rule: a holiday that falls on a Sunday is observed on the following Monday.
+# A holiday that falls on a Saturday is NOT moved: the Reserve Banks stay open the preceding
+# Friday. So, in the covered range:
+#   - 4 July 2026 (Sat): Friday 3 July 2026 is a business day. No closing day is listed.
+#   - 19 June 2027 (Sat): Friday 18 June 2027 is a business day. No closing day is listed.
+#   - 25 December 2027 (Sat): Friday 24 December 2027 is a business day. No closing day is listed.
+#   - 4 July 2027 (Sun): observed Monday 5 July 2027, listed below.
+#   - 1 January 2028 (Sat) falls outside the range; Friday 31 December 2027 is a business day.
+# A date outside the covered range is an error, never a guess.
+name: us-fedwire
+weekendsClosed: true
+coveredFrom: 2026-01-01
+coveredTo: 2027-12-31
+closingDays:
+  # 2026
+  - 2026-01-01   # Thu, New Year's Day
+  - 2026-01-19   # Mon, Birthday of Martin Luther King, Jr. (third Monday of January)
+  - 2026-02-16   # Mon, Washington's Birthday (third Monday of February)
+  - 2026-05-25   # Mon, Memorial Day (last Monday of May)
+  - 2026-06-19   # Fri, Juneteenth National Independence Day
+  - 2026-09-07   # Mon, Labor Day (first Monday of September)
+  - 2026-10-12   # Mon, Columbus Day (second Monday of October)
+  - 2026-11-11   # Wed, Veterans Day
+  - 2026-11-26   # Thu, Thanksgiving Day (fourth Thursday of November)
+  - 2026-12-25   # Fri, Christmas Day
+  # 2027
+  - 2027-01-01   # Fri, New Year's Day
+  - 2027-01-18   # Mon, Birthday of Martin Luther King, Jr.
+  - 2027-02-15   # Mon, Washington's Birthday
+  - 2027-05-31   # Mon, Memorial Day
+  - 2027-07-05   # Mon, Independence Day observed (4 July is a Sunday)
+  - 2027-09-06   # Mon, Labor Day
+  - 2027-10-11   # Mon, Columbus Day
+  - 2027-11-11   # Thu, Veterans Day
+  - 2027-11-25   # Thu, Thanksgiving Day

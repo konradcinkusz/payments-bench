@@ -1,4 +1,4 @@
-# ADR 0007: Built-in validation, one exception handler, one problem body
+# ADR 0008: Built-in validation, one exception handler, one problem body
 
 **Status:** accepted, 2026-10-13
 

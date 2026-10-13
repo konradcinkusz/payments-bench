@@ -6,17 +6,17 @@
   },
   "tests": {
     "domain": {
-      "value": 15,
+      "value": 30,
       "source": "tests/PaymentsBench.Domain.Tests",
       "asOf": "2026-10-13"
     },
     "application": {
-      "value": 22,
+      "value": 42,
       "source": "tests/PaymentsBench.Application.Tests",
       "asOf": "2026-10-13"
     },
     "api": {
-      "value": 26,
+      "value": 27,
       "source": "tests/PaymentsBench.Api.Tests",
       "asOf": "2026-10-13"
     }

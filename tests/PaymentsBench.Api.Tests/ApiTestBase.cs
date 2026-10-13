@@ -20,15 +20,18 @@ public abstract class ApiTestBase : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    protected static object ValidBody(string? endToEndId = null, string scheme = "SEPA", string currency = "EUR", decimal amount = 125.50m) => new
+    protected static object ValidBody(string? endToEndId = null, string scheme = "sepa", string? currency = null, decimal amount = 125.50m) => new
     {
         endToEndId = endToEndId ?? $"E2E-{Guid.NewGuid():N}"[..20],
         amount,
-        currency,
+        currency = currency ?? CurrencyOf(scheme),
         debtorAccount = "DE89370400440532013000",
         creditorAccount = "FR1420041010050500013M02606",
         scheme,
     };
+
+    // Scheme rules are data in scenarios/schemes.yaml; each scheme carries one currency.
+    protected static string CurrencyOf(string scheme) => scheme == "faster-payments" ? "GBP" : "EUR";
 
     protected async Task<HttpResponseMessage> InitiateAsync(object body, string? idempotencyKey = null)
     {
@@ -37,7 +40,7 @@ public abstract class ApiTestBase : IDisposable
         return await Client.SendAsync(request);
     }
 
-    protected async Task<JsonElement> CreatePaymentAsync(string scheme = "SEPA")
+    protected async Task<JsonElement> CreatePaymentAsync(string scheme = "sepa")
     {
         var response = await InitiateAsync(ValidBody(scheme: scheme));
         Assert.Equal(System.Net.HttpStatusCode.Created, response.StatusCode);

@@ -26,3 +26,7 @@ docs/papers/*.nav
 docs/papers/*.snm
 docs/papers/*.vrb
 docs/diagrams/rendered/
+
+# secrets.env.example is the committed, placeholder-only documentation of every variable.
+secrets.env
+!secrets.env.example

@@ -12,7 +12,7 @@ public interface IBusinessCalendar
     bool IsBusinessDay(DateOnly day);
 }
 
-/// <summary>Weekends only. Public holidays are a per-scheme calendar this skeleton does not yet carry.</summary>
+/// <summary>Weekends only. Kept for tests that want a calendar with no holidays; the service uses <see cref="HolidayCalendar"/>.</summary>
 public sealed class WeekendOnlyCalendar : IBusinessCalendar
 {
     public bool IsBusinessDay(DateOnly day) => day.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday);
