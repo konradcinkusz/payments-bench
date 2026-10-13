@@ -1,37 +1,18 @@
-using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.IdentityModel.Protocols;
-using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 
 namespace PaymentsBench.Api.Tests;
 
 public sealed class IdentityTests : IDisposable
 {
-    private const string Authority = "https://auth.test";
-    private const string Issuer = "PaymentsBenchTest";
-    private const string Audience = "PaymentsBenchTest";
+    private const string Authority = JwtTestHost.Authority;
+    private readonly JwtTestHost _host = new();
 
-    // Generated per run and never written anywhere: no key material lives in the tree.
-    private readonly RSA _signingKey = RSA.Create(2048);
-    private readonly List<WebApplicationFactory<ApiEntryPoint>> _factories = [];
-
-    public void Dispose()
-    {
-        foreach (var factory in _factories)
-        {
-            factory.Dispose();
-        }
-
-        _signingKey.Dispose();
-    }
+    public void Dispose() => _host.Dispose();
 
     [Fact]
     public async Task Unauthenticated_initiation_is_401_when_an_authority_is_configured()
@@ -47,7 +28,7 @@ public sealed class IdentityTests : IDisposable
     public async Task A_token_signed_by_the_key_the_jwks_publishes_is_accepted()
     {
         using var client = Jwt().CreateClient();
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token(_signingKey));
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token(_host.SigningKey));
 
         var response = await PostPayment(client, "good-token");
 
@@ -71,7 +52,7 @@ public sealed class IdentityTests : IDisposable
     public async Task A_token_for_another_audience_is_refused()
     {
         using var client = Jwt().CreateClient();
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token(_signingKey, audience: "SomeOtherProduct"));
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token(_host.SigningKey, audience: "SomeOtherProduct"));
 
         var response = await PostPayment(client, "wrong-audience");
 
@@ -83,7 +64,7 @@ public sealed class IdentityTests : IDisposable
     public async Task A_token_signed_with_a_non_rs256_algorithm_is_refused()
     {
         using var client = Jwt().CreateClient();
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token(_signingKey, algorithm: SecurityAlgorithms.RsaSha512Signature));
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token(_host.SigningKey, algorithm: SecurityAlgorithms.RsaSha512Signature));
 
         var response = await PostPayment(client, "rs512");
 
@@ -153,44 +134,15 @@ public sealed class IdentityTests : IDisposable
         Assert.Contains("Auth__Issuer", failure.ToString());
     }
 
-    private WebApplicationFactory<ApiEntryPoint> Jwt() => Host("Production", Authority, Issuer, Audience, publishKey: true);
+    private WebApplicationFactory<ApiEntryPoint> Jwt() => _host.Jwt();
 
-    private WebApplicationFactory<ApiEntryPoint> Development() => Host("Development", authority: null);
+    private WebApplicationFactory<ApiEntryPoint> Development() => _host.Development();
 
-    private WebApplicationFactory<ApiEntryPoint> Host(string environment, string? authority, string? issuer = null, string? audience = null, bool publishKey = false)
-    {
-        var baseFactory = new WebApplicationFactory<ApiEntryPoint>();
-        _factories.Add(baseFactory);
-        var factory = baseFactory.WithWebHostBuilder(builder =>
-        {
-            builder.UseEnvironment(environment);
-            // Settings, not ConfigureAppConfiguration: registration reads them before the host is built.
-            builder.UseSetting("Auth:Authority", authority);
-            builder.UseSetting("Auth:Issuer", issuer);
-            builder.UseSetting("Auth:Audience", audience);
-            if (publishKey)
-            {
-                // Stands in for GET {authority}/.well-known/openid-configuration and its jwks_uri:
-                // the handler gets this configuration instead of fetching one over HTTP. Set on the manager
-                // because the options post-configuration has already built one from MetadataAddress.
-                builder.ConfigureServices(services => services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
-                {
-                    var configuration = new OpenIdConnectConfiguration { Issuer = Issuer };
-                    configuration.SigningKeys.Add(new RsaSecurityKey(_signingKey.ExportParameters(includePrivateParameters: false)) { KeyId = "test-key" });
-                    options.ConfigurationManager = new StaticConfigurationManager<OpenIdConnectConfiguration>(configuration);
-                }));
-            }
-        });
-        _factories.Add(factory);
-        return factory;
-    }
+    private WebApplicationFactory<ApiEntryPoint> Host(string environment, string? authority, string? issuer = null, string? audience = null) =>
+        _host.Host(environment, authority, issuer, audience);
 
-    private static string Token(RSA key, string audience = Audience, string algorithm = SecurityAlgorithms.RsaSha256)
-    {
-        var credentials = new SigningCredentials(new RsaSecurityKey(key) { KeyId = "test-key" }, algorithm);
-        var token = new JwtSecurityToken(Issuer, audience, claims: [new("sub", "test-user")], expires: DateTime.UtcNow.AddMinutes(5), signingCredentials: credentials);
-        return new JwtSecurityTokenHandler().WriteToken(token);
-    }
+    private static string Token(RSA key, string audience = JwtTestHost.Audience, string algorithm = SecurityAlgorithms.RsaSha256) =>
+        JwtTestHost.Token(key, audience, algorithm);
 
     private static async Task<HttpResponseMessage> PostPayment(HttpClient client, string key)
     {

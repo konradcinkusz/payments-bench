@@ -19,7 +19,7 @@ primary_region = "fra"            # one region for the whole estate: same-region
 
 # Everything in [env] is public (git diff, `fly config show`, image metadata). Secrets are not.
 [env]
-  # Production, never Development: Development means anonymous access (ADR 0004). Outside
+  # Production, never Development: Development means anonymous access (ADR 0015). Outside
   # Development the API also refuses to start without Auth__Authority, which is the point.
   ASPNETCORE_ENVIRONMENT = "Production"
   ASPNETCORE_URLS = "http://+:8080"   # all interfaces; must equal internal_port below

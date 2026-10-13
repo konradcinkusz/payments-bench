@@ -110,8 +110,18 @@ request or a log.
 ### GitHub environment `production`
 
 Create the environment `production` (Settings > Environments); the deploy workflow references it,
-so GitHub creates an empty one on first use. Restrict it to protected `v*` tags and require a
-reviewer if you want a human gate before a deploy.
+so GitHub creates an empty one on first use, and an empty one protects nothing. Before the first
+tag, set all three of these:
+
+- **Required reviewers**: a human gate before any job that holds a secret.
+- **Deployment branches and tags**: selected, `v*` tags only (and `main` if a manual run is ever
+  wanted). Otherwise anyone with write access can run a workflow from a branch of their own, with
+  a step that prints the secrets below.
+- **A tag ruleset** (Settings > Rules) that lets only maintainers create `v*` tags. Otherwise a tag
+  on an unreviewed commit builds, pushes and deploys that commit.
+
+Record the date you checked them in the pull request that tags the release (security review
+SEC-10).
 
 | Name | Kind | Used for | How to generate |
 |---|---|---|---|
@@ -151,8 +161,12 @@ From the pipeline, not a laptop; `fly launch` would write a config nobody review
 setup:
 
 1. Create a Fly organisation (or use `personal`) and a token: `fly tokens create org`.
-1. Create the GitHub environment `production` and add `FLY_API_TOKEN` and the four root secrets
-   from the table above.
+1. Create the GitHub environment `production`, set its protections (previous section), and add
+   `FLY_API_TOKEN` and the four root secrets from the table above.
+1. Clear the "blocks deployment" table of the
+   [security review](security/SECURITY-REVIEW.md): who can obtain a token from authservice
+   (SEC-03), the environment protections (SEC-10), and the ownership gap (SEC-01), which is
+   acceptable only while the token population is the operator alone.
 1. After the first tag has pushed images (below), make the two GHCR packages public.
 
 Nothing else: no app creation, no volume creation. Each deploy job creates its app and, for

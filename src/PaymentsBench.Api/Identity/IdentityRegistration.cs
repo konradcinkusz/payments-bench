@@ -20,6 +20,9 @@ internal static class IdentityRegistration
     public const string IssuerKey = "Auth:Issuer";
     public const string AudienceKey = "Auth:Audience";
 
+    /// <summary>Set by Fly.io on every machine it runs (an environment variable, read here as configuration).</summary>
+    public const string FlyAppNameKey = "FLY_APP_NAME";
+
     public static WebApplicationBuilder AddPaymentsIdentity(this WebApplicationBuilder builder)
     {
         var configuration = builder.Configuration;
@@ -28,7 +31,7 @@ internal static class IdentityRegistration
         if (string.IsNullOrWhiteSpace(authority))
         {
             // Deliberately not P8 "degrade" outside Development: a deployed payment API without
-            // authentication is open, not degraded (ADR 0008).
+            // authentication is open, not degraded (ADR 0015).
             if (!builder.Environment.IsDevelopment())
             {
                 throw new InvalidOperationException(
@@ -36,8 +39,19 @@ internal static class IdentityRegistration
                     + "Outside Development the API refuses to start without an authority to validate tokens against.");
             }
 
+            // The environment name is the only thing that separates this open mode from a deployment, and
+            // it is one mis-set variable (SEC-06 in docs/security/SECURITY-REVIEW.md). A second, independent signal closes that gap: Fly sets
+            // FLY_APP_NAME on every machine, so a machine that is on Fly is never a local Development run.
+            if (!string.IsNullOrWhiteSpace(configuration[FlyAppNameKey]))
+            {
+                throw new InvalidOperationException(
+                    $"Auth__Authority is not set and this process is running on Fly.io ({FlyAppNameKey} is set). "
+                    + "The Development anonymous policy is for a developer's machine; a deployed API without an authority refuses to start.");
+            }
+
             builder.Services.AddSingleton(new AuthMode(Anonymous: true, Authority: null));
             builder.Services.AddAuthorization();
+            builder.Services.AddPaymentsAuthorizationPolicies(configuration, anonymous: true);
             return builder;
         }
 
@@ -67,6 +81,7 @@ internal static class IdentityRegistration
 
         builder.Services.AddAuthorizationBuilder()
             .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
+        builder.Services.AddPaymentsAuthorizationPolicies(configuration, anonymous: false);
         return builder;
     }
 
