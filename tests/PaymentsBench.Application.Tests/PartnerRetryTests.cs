@@ -1,8 +1,10 @@
+using System.Diagnostics;
 using System.Net;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using PaymentsBench.Application.Ports;
 using PaymentsBench.Infrastructure;
+using Polly.CircuitBreaker;
 
 namespace PaymentsBench.Application.Tests;
 
@@ -24,6 +26,75 @@ public class PartnerRetryTests
 
         Assert.Equal(PartnerStatus.Accepted, result.Status);
         Assert.Equal(["GET", "GET"], handler.Methods);
+    }
+
+    [Fact]
+    public async Task A_status_lookup_that_hits_an_open_circuit_is_attempted_once()
+    {
+        var handler = new ScriptedHandler(_ => throw new BrokenCircuitException("circuit is open"));
+        await using var provider = Build(handler);
+
+        var result = await provider.GetRequiredService<IPartnerGateway>().GetStatusAsync("E2E-1", CancellationToken.None);
+
+        Assert.Equal(PartnerStatus.Unavailable, result.Status);
+        Assert.Equal(["GET"], handler.Methods);
+    }
+
+    [Fact]
+    public async Task A_status_lookup_that_hits_an_isolated_circuit_is_attempted_once()
+    {
+        var handler = new ScriptedHandler(_ => throw new IsolatedCircuitException("circuit is isolated"));
+        await using var provider = Build(handler);
+
+        var result = await provider.GetRequiredService<IPartnerGateway>().GetStatusAsync("E2E-1", CancellationToken.None);
+
+        Assert.Equal(PartnerStatus.Unavailable, result.Status);
+        Assert.Equal(["GET"], handler.Methods);
+    }
+
+    [Fact]
+    public async Task Once_failing_submits_have_opened_the_circuit_a_status_lookup_fails_fast()
+    {
+        var handler = new ScriptedHandler(_ => Json(HttpStatusCode.ServiceUnavailable, "{}"));
+        await using var provider = Build(handler);
+        var gateway = provider.GetRequiredService<IPartnerGateway>();
+        var transfer = new PartnerTransfer("E2E-1", 10m, "EUR", "DE89370400440532013000", "GB33BUKB20201555555555", "sepa");
+
+        // Ten failures in the sampling window (the minimum throughput) at a 100 % failure ratio.
+        for (var i = 0; i < 10; i++)
+        {
+            Assert.Equal(SubmitOutcome.Unknown, (await gateway.SubmitAsync(transfer, CancellationToken.None)).Outcome);
+        }
+
+        var reached = handler.Methods.Count;
+        var clock = Stopwatch.StartNew();
+        var result = await gateway.GetStatusAsync("E2E-1", CancellationToken.None);
+        clock.Stop();
+
+        Assert.Equal(PartnerStatus.Unavailable, result.Status);
+        Assert.Equal(nameof(BrokenCircuitException), result.ReasonCode);
+        Assert.Equal(reached, handler.Methods.Count); // the open circuit never reached the partner
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(1), $"an open circuit took {clock.Elapsed} to answer; it must fail fast, not wait out the retry backoff");
+    }
+
+    [Theory]
+    [InlineData("GET", true)]
+    [InlineData("POST", false)]
+    public async Task Only_a_lookup_that_threw_a_transport_error_is_retried(string method, bool retried)
+    {
+        var request = new HttpRequestMessage(new HttpMethod(method), "http://partner/x");
+        var context = Polly.ResilienceContextPool.Shared.Get(CancellationToken.None);
+        context.Properties.Set(new Polly.ResiliencePropertyKey<HttpRequestMessage?>("Resilience.Http.RequestMessage"), request);
+        try
+        {
+            var args = new Polly.Retry.RetryPredicateArguments<HttpResponseMessage>(
+                context, Polly.Outcome.FromException<HttpResponseMessage>(new HttpRequestException("reset")), 0);
+            Assert.Equal(retried, await Infrastructure.Partner.PartnerResilience.ShouldRetry(args));
+        }
+        finally
+        {
+            Polly.ResilienceContextPool.Shared.Return(context);
+        }
     }
 
     [Fact]

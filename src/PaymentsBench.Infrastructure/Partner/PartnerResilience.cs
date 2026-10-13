@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Configuration;
 using Polly;
+using Polly.CircuitBreaker;
 using Polly.Retry;
+using Polly.Timeout;
 
 namespace PaymentsBench.Infrastructure.Partner;
 
@@ -22,15 +24,32 @@ public sealed record PartnerTimeouts(TimeSpan Client, TimeSpan Attempt, TimeSpan
 public static class PartnerResilience
 {
     /// <summary>
-    /// Retry a lookup (<c>GET</c>) that threw or answered 5xx; never retry anything else. The method
-    /// is read from the request on the resilience context, because an attempt that threw has no
-    /// response to read it from.
+    /// Retry a lookup (<c>GET</c>) that threw a transport error, timed out per attempt or answered 5xx;
+    /// never retry anything else. The method is read from the request on the resilience context, because
+    /// an attempt that threw has no response to read it from.
+    /// <para>
+    /// An open circuit is not retried: <see cref="BrokenCircuitException"/> (and its subclass
+    /// <see cref="IsolatedCircuitException"/>) means the breaker is shedding load, so another attempt
+    /// would only wait out the backoff and be rejected again, holding a request thread during the very
+    /// outage the breaker exists to absorb (P13; SERVICE-API-PATTERNS §5). Likewise a timeout that
+    /// comes from the total-request budget: the context token is already cancelled, nothing is left to
+    /// spend. A per-attempt timeout leaves the context token alone and stays retryable.
+    /// </para>
     /// </summary>
     public static ValueTask<bool> ShouldRetry(RetryPredicateArguments<HttpResponseMessage> args)
     {
         var method = args.Context.GetRequestMessage()?.Method ?? args.Outcome.Result?.RequestMessage?.Method;
-        return ValueTask.FromResult(
-            method == HttpMethod.Get
-            && (args.Outcome.Exception is not null || (int?)args.Outcome.Result?.StatusCode >= 500));
+        if (method != HttpMethod.Get || args.Context.CancellationToken.IsCancellationRequested)
+        {
+            return ValueTask.FromResult(false);
+        }
+
+        return ValueTask.FromResult(args.Outcome.Exception switch
+        {
+            BrokenCircuitException => false,
+            TimeoutRejectedException => true,
+            not null => true,
+            null => (int?)args.Outcome.Result?.StatusCode >= 500,
+        });
     }
 }
