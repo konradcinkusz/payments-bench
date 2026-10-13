@@ -9,14 +9,28 @@ namespace PaymentsBench.Infrastructure.Outbox;
 /// <summary>
 /// Polls the outbox and hands each message to <see cref="IEventPublisher"/>, marking it
 /// dispatched only after the publish returned. Consumers must dedupe on the message id: this
-/// is at-least-once by design.
+/// is at-least-once by design. It waits for the <see cref="MigrationGate"/> before its first batch.
 /// </summary>
-public sealed class OutboxDispatcher(IServiceScopeFactory scopes, IEventPublisher publisher, ILogger<OutboxDispatcher> logger) : BackgroundService
+public sealed class OutboxDispatcher(IServiceScopeFactory scopes, IEventPublisher publisher, MigrationGate gate, ILogger<OutboxDispatcher> logger) : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromSeconds(2);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        try
+        {
+            await gate.WaitAsync(stoppingToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Outbox dispatcher not started: the schema migration failed.");
+            return;
+        }
+
         while (!stoppingToken.IsCancellationRequested)
         {
             try

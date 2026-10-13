@@ -6,19 +6,43 @@ using Microsoft.Extensions.Logging;
 namespace PaymentsBench.Infrastructure.Persistence;
 
 /// <summary>
-/// Applies the schema on start-up so a fresh database needs no manual step. Until the first
-/// EF Core migration is generated this calls EnsureCreated; the register records that as a
-/// deviation to close.
+/// Migrates the schema once the server is accepting requests, so <c>/alive</c> answers while it
+/// works and <c>/health</c> reports unhealthy until the <see cref="MigrationGate"/> opens. A
+/// failed migration is logged and faults the gate; the process stays up and unhealthy rather
+/// than crash-looping on a schema problem an operator has to fix.
 /// </summary>
-public sealed class MigrationHostedService(IServiceScopeFactory scopes, ILogger<MigrationHostedService> logger) : IHostedService
+public sealed class MigrationHostedService(
+    IServiceScopeFactory scopes,
+    MigrationGate gate,
+    IHostApplicationLifetime lifetime,
+    ILogger<MigrationHostedService> logger) : BackgroundService
 {
-    public async Task StartAsync(CancellationToken cancellationToken)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        using var scope = scopes.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<PaymentsDbContext>();
-        var created = await db.Database.EnsureCreatedAsync(cancellationToken);
-        logger.LogInformation("Database schema {Action}.", created ? "created" : "already present");
+        try
+        {
+            await WaitForServerAsync(stoppingToken);
+            using var scope = scopes.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<PaymentsDbContext>();
+            await db.Database.MigrateAsync(stoppingToken);
+            logger.LogInformation("Database schema migrated.");
+            gate.Complete();
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            gate.Fail(new OperationCanceledException("Host stopped before the migration finished."));
+        }
+        catch (Exception ex)
+        {
+            logger.LogCritical(ex, "Database migration failed; the service stays unhealthy.");
+            gate.Fail(ex);
+        }
     }
 
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    private async Task WaitForServerAsync(CancellationToken cancellationToken)
+    {
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var startedRegistration = lifetime.ApplicationStarted.Register(() => started.TrySetResult());
+        await started.Task.WaitAsync(cancellationToken);
+    }
 }

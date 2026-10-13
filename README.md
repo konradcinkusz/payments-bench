@@ -32,7 +32,7 @@ Each figure names the file it was measured in; the measurements were taken on `m
 
 | | | |
 |---|---|---|
-| **The tests** | 37 · 15 + 22 | `dotnet test`: 15 in `tests/PaymentsBench.Domain.Tests`, 22 in `tests/PaymentsBench.Application.Tests`, on the in-memory stores, no database. |
+| **The tests** | 98 · 30 + 42 + 26 | `dotnet test`: 30 in `tests/PaymentsBench.Domain.Tests`, 42 in `tests/PaymentsBench.Application.Tests` (in-memory stores), 26 in `tests/PaymentsBench.Integration.Tests` (real PostgreSQL). |
 | **The scenarios** | 7 files · 4 classes | [`scenarios/`](scenarios/) holds seven scenario files in the classes `happy`, `partner-failure`, `duplicate` and `reconciliation`. They are a specification; none is executed yet (R3). |
 | **The register** | 10 open rows | [`docs/REGISTER.md`](docs/REGISTER.md): R1 to R10, none closed. |
 | **The findings** | 5 | [`docs/FINDINGS.md`](docs/FINDINGS.md): F-1 and F-2 fixed, F-3 to F-5 open. |
@@ -41,9 +41,15 @@ Each figure names the file it was measured in; the measurements were taken on `m
 ## Run it
 
 ```bash
-dotnet test                                   # 72 tests, no database needed
+dotnet test                                   # 98 tests; the 26 integration tests need PostgreSQL (see below)
 dotnet run --project src/PaymentsBench.AppHost   # Aspire: PostgreSQL + simulator + API + dashboard
 ```
+
+The integration tests (`tests/PaymentsBench.Integration.Tests`) find a database in one of two ways:
+with Docker running they start a `postgres:16-alpine` Testcontainers container; otherwise set
+`PAYMENTSBENCH_TEST_POSTGRES` to a server that trusts you, for example
+`PAYMENTSBENCH_TEST_POSTGRES="Host=localhost;Port=5432;Username=postgres" dotnet test`. Each test
+class gets its own throwaway database. With neither, they fail with a message saying so; they are never skipped.
 
 Or without Aspire, in memory, two terminals:
 
@@ -90,7 +96,7 @@ curl localhost:5100/payments/<id>/ledger
 ## What is built, and what has never run
 
 Built, tested and on `main`: the domain, the application handlers, the in-memory and EF Core
-stores, the HTTP surface, the partner simulator with switchable faults, and the 37 tests above.
+stores, the HTTP surface, the partner simulator with switchable faults, and the 98 tests above.
 
 Never run, recorded in [`docs/REGISTER.md`](docs/REGISTER.md) rather than in a footnote:
 
