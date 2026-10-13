@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json.Serialization;
+using PaymentsBench.PartnerSimulator;
 using PaymentsBench.ServiceDefaults;
 
 // A bank that misbehaves on request. Every failure mode a payment rail meets in production is a
@@ -78,7 +79,7 @@ app.MapPost("/transfers/{endToEndId}/return", (string endToEndId, string? reason
     return Results.Ok(transfers[endToEndId]);
 });
 
-app.MapGet("/statements/{date}", (DateOnly date) =>
+app.MapGet("/statements/{date}", (DateOnly date, HttpRequest request) =>
 {
     var drift = profile.Current.Kind == FaultKind.StatementDrift ? profile.Current.DriftAmount ?? 0.01m : 0m;
     var lines = transfers.Values
@@ -92,6 +93,13 @@ app.MapGet("/statements/{date}", (DateOnly date) =>
             direction = "Debit",
         })
         .ToList();
+
+    // Content negotiation: a caller that accepts application/xml gets the camt.053 rendering; anyone else, the JSON reduction.
+    if (request.GetTypedHeaders().Accept.Any(a => a.MediaType.Equals(StatementXml.MediaType, StringComparison.OrdinalIgnoreCase)))
+    {
+        return Results.Content(StatementXml.Render(date, "NOSTRO-SIM", lines.Select(l => (l.endToEndId, l.amount, l.currency, l.direction))), StatementXml.MediaType);
+    }
+
     return Results.Ok(new { date, account = "NOSTRO-SIM", lines });
 });
 

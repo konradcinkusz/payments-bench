@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <ProjectReference Include="..\PaymentsBench.Application\PaymentsBench.Application.csproj" />
+    <ProjectReference Include="..\PaymentsBench.Iso20022\PaymentsBench.Iso20022.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
