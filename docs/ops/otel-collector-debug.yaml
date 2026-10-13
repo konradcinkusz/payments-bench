@@ -1,0 +1,27 @@
+# A local OTLP sink for proving telemetry leaves the services: receives traces, metrics and logs
+# and prints a summary of each batch (debug exporter) while writing them to JSON lines (file
+# exporter) so they can be counted. Nothing is forwarded anywhere.
+#   otelcol-contrib --config docs/ops/otel-collector-debug.yaml
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 127.0.0.1:4317
+      http:
+        endpoint: 127.0.0.1:4318
+
+exporters:
+  debug:
+    verbosity: normal
+  file/traces:
+    path: ${env:OTEL_SINK_DIR}/traces.jsonl
+  file/metrics:
+    path: ${env:OTEL_SINK_DIR}/metrics.jsonl
+  file/logs:
+    path: ${env:OTEL_SINK_DIR}/logs.jsonl
+
+service:
+  pipelines:
+    traces:  { receivers: [otlp], exporters: [debug, file/traces] }
+    metrics: { receivers: [otlp], exporters: [debug, file/metrics] }
+    logs:    { receivers: [otlp], exporters: [debug, file/logs] }

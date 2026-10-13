@@ -1,0 +1,11 @@
+groups:
+  - name: payments-bench
+    rules:
+      - alert: SubmittedPaymentStuck
+        # Threshold and reasoning: docs/ops/README.md ("Alert threshold").
+        expr: max(payments_submitted_oldest_age_seconds) > 300
+        for: 2m
+        labels: { severity: page }
+        annotations:
+          summary: A payment has been at Submitted for more than 5 minutes
+          description: The outcome at the simulated partner is unknown and the resolver sweep has not settled it.

@@ -1,0 +1,14 @@
+# Scrapes the API's /metrics, which exists only when Metrics__Prometheus__Enabled=true.
+# The partner simulator is not scraped: it is a simulated bank and has no business metrics.
+global:
+  scrape_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  - job_name: payments-bench-api
+    metrics_path: /metrics
+    static_configs:
+      # The API run with `dotnet run` on the host (docker-compose.yml maps host.docker.internal).
+      - targets: ["host.docker.internal:5100"]

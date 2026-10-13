@@ -1,7 +1,7 @@
 # Scenarios
 
 Each file describes one thing the payment rail must survive, as data: the fault the partner
-injects, the calls made against the API, and the state the system must end in. The runner (`tests/PaymentsBench.Scenarios`, ADR 0010) executes every file here
+injects, the calls made against the API, and the state the system must end in. The runner (`tests/PaymentsBench.Scenarios`, ADR 0011) executes every file here
 end to end against the API and the simulated partner, both in process, on in-memory storage and, when
 `PAYMENTSBENCH_TEST_POSTGRES` is set (CI does), on PostgreSQL as well. A new file is a new case;
 `schemes.yaml` and `calendars/` are data, not scenarios, and are skipped. Run it with

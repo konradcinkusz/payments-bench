@@ -23,8 +23,8 @@ bench, not a product: the bank is simulated, the schemes are data, and a registe
 | Partner simulator with faults | `PaymentsBench.PartnerSimulator` | Latency, timeout after accept, 503, reject-all, statement drift: switched at runtime with `PUT /faults`. |
 | Degraded storage | `InfrastructureRegistration` | No connection string: the service runs in memory and says so in the log, instead of refusing to start. |
 
-Observability: one OpenTelemetry trace per request, a `payments.transitions` counter tagged by
-status, `/health` and `/alive`, OTLP export when `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
+Observability: OpenTelemetry traces, metrics and logs over OTLP, an opt-in `/metrics`, and a
+provisioned Grafana dashboard; see [`docs/ops/`](docs/ops/README.md).
 
 ## The numbers
 
@@ -41,7 +41,7 @@ Each figure names the file it was measured in; the measurements were taken on `m
 ## Run it
 
 ```bash
-dotnet test                                   # 178 tests; the 31 integration tests need PostgreSQL (see below)
+dotnet test                                   # 202 tests; the 35 integration tests need PostgreSQL (see below)
 dotnet test tests/PaymentsBench.Scenarios     # every scenarios/*.yaml end to end, in process; PostgreSQL too when the variable below is set
 dotnet run --project src/PaymentsBench.AppHost   # Aspire: PostgreSQL + simulator + API + dashboard
 ```

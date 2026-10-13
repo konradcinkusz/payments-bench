@@ -1,4 +1,4 @@
-# ADR 0010: Scenarios run in process against the API and the simulator
+# ADR 0011: Scenarios run in process against the API and the simulator
 
 **Status:** accepted, 2026-10-13
 

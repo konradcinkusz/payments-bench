@@ -11,12 +11,12 @@
       "asOf": "2026-10-13"
     },
     "application": {
-      "value": 51,
+      "value": 63,
       "source": "tests/PaymentsBench.Application.Tests",
       "asOf": "2026-10-13"
     },
     "integration": {
-      "value": 31,
+      "value": 35,
       "source": "tests/PaymentsBench.Integration.Tests",
       "asOf": "2026-10-13"
     },
