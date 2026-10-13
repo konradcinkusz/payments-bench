@@ -17,12 +17,11 @@ remembers, or build it in CI.
 ## Decision
 
 The PDF is compiled from LaTeX sources in `docs/papers/` by
-`.github/workflows/build-overview-pdf.yml` (slice C4 in
-[`plans/stream-c-docs.md`](../plans/stream-c-docs.md)) and is never committed. The workflow runs:
+`.github/workflows/build-overview-pdf.yml` and is never committed. The workflow runs:
 
 - on `workflow_dispatch`, for a build whenever someone wants one;
-- on pull requests whose changes touch `docs/papers/**` or `docs/diagrams/**`, attaching the PDF
-  as an artifact;
+- on pull requests whose changes touch `docs/papers/**`, `docs/diagrams/**`, the diagram render
+  script, the npm package files or the workflow itself, attaching the PDF as an artifact;
 - on `v*` tags, attaching the PDF to the release as an asset.
 
 Only the release job holds `contents: write`; the build job holds `contents: read`.
@@ -41,4 +40,3 @@ at zero for the pull requests that do not touch the sources, which is most of th
 - The edition can lag `OVERVIEW.md` between releases. The Markdown is the source of truth; the
   PDF header carries the build date and its title block
   names `docs/OVERVIEW.md` as its source; it does not name a commit.
-- Until slice C4 has merged this record describes a decision, not a workflow on `main`.

@@ -5,9 +5,9 @@ edition, and the one step that has to be done by hand. This covers the **documen
 If a `docs/DEPLOYMENT.md` exists (stream B, platform), it covers deploying the service, not this.
 
 What is published today depends on what has merged. On the day this file was written
-(2026-10-13) `main` has the Pages workflow and neither the site nor the PDF edition; both are
-planned slices C5 and C4 in [`plans/stream-c-docs.md`](plans/stream-c-docs.md). The sections
-below describe how each will work and say what is not there yet.
+(2026-10-13) `main` has the Pages workflow and the PDF workflow; the site is not on `main` yet
+(slice C5 in [`plans/stream-c-docs.md`](plans/stream-c-docs.md)), so the site section below
+describes how it will work.
 
 ## The one manual step
 
@@ -44,16 +44,22 @@ the job summary; for this repository it is expected to be
 
 The PDF is built, never committed
 (decision: [ADR 0004](adr/0004-the-overview-pdf-is-built-on-demand.md)). The workflow is
-`.github/workflows/build-overview-pdf.yml` (slice C4, not on `main` yet). Once it has merged:
+`.github/workflows/build-overview-pdf.yml`, named *Build Overview PDF*:
 
-- **Dispatch.** Run *Build Overview PDF* from the Actions tab; the PDF is a workflow artifact.
-- **Pull requests.** A pull request that touches `docs/papers/**` or `docs/diagrams/**` builds it
-  and attaches the PDF as an artifact, so a broken document is caught on the PR.
-- **Tags.** Pushing a `v*` tag builds it and attaches it to the GitHub release as an asset.
-  This is the only job that holds `contents: write`.
+- **Dispatch.** Run *Build Overview PDF* from the Actions tab and download the
+  `PaymentsBench_Overview_PDF` artifact from the run.
+- **Pull requests.** A pull request that touches `docs/papers/**`, `docs/diagrams/**`,
+  `scripts/render-diagrams.mjs`, `package.json`, `package-lock.json` or the workflow itself builds
+  the PDF and attaches the same artifact, so a broken document is caught on the PR. Other pull
+  requests do not run it.
+- **Tags.** Pushing a `v*` tag builds it and attaches `PaymentsBench_Overview.pdf` to the GitHub
+  release as an asset. This is the only job that holds `contents: write`.
 
-Source for the PDF is `docs/papers/`, a LaTeX presentation of
-[`OVERVIEW.md`](OVERVIEW.md), which stays the source of truth.
+The source is `docs/papers/` (`payments-bench-overview.tex` and `house-preamble.tex`), a LaTeX
+presentation of [`OVERVIEW.md`](OVERVIEW.md), which stays the source of truth; the Mermaid
+diagrams in `docs/diagrams/` are rendered into it. `npm run lint:papers` (part of `npm run lint`)
+checks the LaTeX sources. The build is described step by step in
+[OVERVIEW section 20](OVERVIEW.md#20-getting-the-pdf).
 
 ## What can go wrong
 

@@ -2,6 +2,7 @@
 
 [![License](https://flat.badgen.net/github/license/konradcinkusz/payments-bench?icon=github&color=black&scale=1.01)](https://github.com/konradcinkusz/payments-bench/blob/main/LICENSE "License")
 [![CI](https://github.com/konradcinkusz/payments-bench/actions/workflows/ci.yml/badge.svg)](https://github.com/konradcinkusz/payments-bench/actions/workflows/ci.yml "CI")
+[![Build Overview PDF](https://github.com/konradcinkusz/payments-bench/actions/workflows/build-overview-pdf.yml/badge.svg)](https://github.com/konradcinkusz/payments-bench/actions/workflows/build-overview-pdf.yml "Build Overview PDF")
 
 An outbound bank-transfer service, built to show the mechanisms a payment rail needs in order to
 move money exactly once and to recover when the partner on the other end misbehaves. It is a
@@ -83,7 +84,8 @@ curl localhost:5100/payments/<id>/ledger
 | **What is not proved** | [`docs/REGISTER.md`](docs/REGISTER.md): dated rows with closing conditions. |
 | **Decisions already taken** | [`docs/adr/`](docs/adr/): one record each. |
 | **How the documentation is published** | [`docs/DEPLOYMENT-DOCS.md`](docs/DEPLOYMENT-DOCS.md), including the one manual GitHub Pages step. |
-| **The site and the PDF edition** | Planned, not available: see [`docs/plans/stream-c-docs.md`](docs/plans/stream-c-docs.md). |
+| **A PDF edition of the overview** | [`docs/papers/payments-bench-overview.tex`](docs/papers/payments-bench-overview.tex), built on demand by the *Build Overview PDF* workflow and never committed: [OVERVIEW section 20](docs/OVERVIEW.md#20-getting-the-pdf) says how to get it. |
+| **The site** | Planned, not available: see [`docs/plans/stream-c-docs.md`](docs/plans/stream-c-docs.md). |
 
 ## What is built, and what has never run
 
@@ -127,11 +129,12 @@ docs/                               architecture, the register, decision records
   START-HERE.md  OVERVIEW.md  FINDINGS.md  ARCHITECTURE.md  REGISTER.md
   DIAGRAMS.md                       six Mermaid diagrams, each also a file in diagrams/
   DEPLOYMENT-DOCS.md                how the documentation is published
+  papers/                           LaTeX edition of OVERVIEW.md, built to PDF on demand
   adr/                              decision records
   plans/                            the three streams of planned work
-scripts/                            documentation tooling (link check, diagram render and check)
-package.json                        documentation tooling only: markdownlint, link check and diagram check, nothing .NET depends on it
-.github/workflows/                  CI; the Pages deploy workflow
+scripts/                            documentation tooling (link check, diagram render and check, LaTeX source check)
+package.json                        documentation tooling only: markdownlint, link check, diagram check and papers check, nothing .NET depends on it
+.github/workflows/                  CI, the PDF build, the Pages deploy
 ```
 
 ## How this repository relates to the standards
