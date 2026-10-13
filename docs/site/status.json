@@ -37,6 +37,10 @@
       {
         "number": 6,
         "title": "Docs: OVERVIEW, FINDINGS and START-HERE"
+      },
+      {
+        "number": 7,
+        "title": "Diagrams: six Mermaid sources, render and check scripts, DIAGRAMS.md"
       }
     ],
     "source": "docs/plans",

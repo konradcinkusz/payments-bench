@@ -210,27 +210,37 @@ function adrsHtml(adrs) {
 function loadFindings() {
   if (!existsSync(rel('docs/FINDINGS.md'))) return null;
   const lines = read('docs/FINDINGS.md').split('\n');
-  const found = [];
-  for (let i = 0; i < lines.length; i += 1) {
-    const match = /^##\s+(F-\d+)\.\s+(.+)$/.exec(lines[i]);
-    if (!match) continue;
-    found.push({ id: match[1], title: match[2].trim() });
+  const titles = new Map();
+  for (const line of lines) {
+    const match = /^##\s+(F-\d+)\.\s+(.+)$/.exec(line);
+    if (match) titles.set(match[1], match[2].trim());
   }
-  return found;
+  // The summary table at the top: | # | Defect | Found by | Severity | Status |
+  const rows = new Map();
+  for (const line of lines) {
+    if (!/^\|\s*F-\d+\s*\|/.test(line)) continue;
+    const [id, defect, foundBy, severity, status] = splitRow(line);
+    rows.set(id, { defect, foundBy, severity, status });
+  }
+  const ids = [...new Set([...titles.keys(), ...rows.keys()])].sort((a, b) => Number(a.slice(2)) - Number(b.slice(2)));
+  return ids.map((id) => ({ id, title: titles.get(id) ?? rows.get(id).defect, ...(rows.get(id) ?? {}) }));
 }
 
 function findingsHtml(findings) {
   if (findings === null || findings.length === 0) {
     return '<p class="note"><strong>The findings report is being written.</strong> It will appear here as <code>docs/FINDINGS.md</code> once it is on <code>main</code>; until then this page claims nothing about what the bench caught.</p>';
   }
+  // Status chips are deliberately neutral: green, amber and red are reserved for payment outcomes.
   const cards = findings
-    .map(
-      (f) =>
-        `<article class="card"><p class="eyebrow">${esc(f.id)}</p><h3>${inline(f.title)}</h3></article>`,
-    )
+    .map((f) => {
+      const chips = [f.status ? `<span class="chip">${esc(f.status)}</span>` : '', f.severity ? `<span class="chip">severity: ${esc(f.severity)}</span>` : '']
+        .filter(Boolean)
+        .join(' ');
+      return `<article class="card"><p class="eyebrow">${esc(f.id)}</p><h3>${inline(f.title)}</h3>${chips ? `<p>${chips}</p>` : ''}${f.foundBy ? `<p class="muted">Found by: ${inline(f.foundBy)}</p>` : ''}</article>`;
+    })
     .join('\n');
   return `<div class="cards cards-2">\n${cards}\n</div>
-<p>The evidence for each finding, and whether it is fixed or still open, is in <a href="REPO/blob/main/docs/FINDINGS.md">docs/FINDINGS.md</a>.</p>`;
+<p>The evidence for each finding is in <a href="REPO/blob/main/docs/FINDINGS.md">docs/FINDINGS.md</a>; its summary table is quoted above. <span class="src">docs/FINDINGS.md</span></p>`;
 }
 
 // ------------------------------------------------------------------ documents
