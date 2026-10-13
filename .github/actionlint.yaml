@@ -1,0 +1,12 @@
+# actionlint configuration (used by .github/workflows/lint.yml).
+#
+# Ignores are per file and per message, never global.
+paths:
+  .github/workflows/build-overview-pdf.yml:
+    ignore:
+      # SC2155 (declare and assign separately) on `export X="$(command -v ...)"`. The
+      # workflow belongs to the documentation stream and the pattern is harmless there:
+      # the `||` chain inside the substitution already yields an empty string on a miss,
+      # and the next command fails loudly without Chrome. Remove this entry when that
+      # workflow splits the export from the assignment.
+      - 'shellcheck reported issue in this script: SC2155'

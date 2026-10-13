@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+#
+# pre-commit - secret scan of staged changes before anything becomes history.
+#
+# Installed by scripts/install-hooks.sh (called by scripts/setup.sh) into .git/hooks/.
+# Mirrors the CI job .github/workflows/secret-scan.yml (staged changes instead of full
+# history), using the same .gitleaks.toml.
+#
+# Decision: the hook FAILS when no scanner is available. "Warn and continue" would make
+# the protection depend on the developer's toolchain. `git commit --no-verify` remains
+# the loud escape hatch, and CI still blocks the push.
+
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+CONFIG="${REPO_ROOT}/.gitleaks.toml"
+IMAGE="ghcr.io/gitleaks/gitleaks:latest"
+
+red()   { printf '\033[0;31m%s\033[0m\n' "$*"; }
+green() { printf '\033[0;32m%s\033[0m\n' "$*"; }
+dim()   { printf '\033[0;90m%s\033[0m\n' "$*"; }
+
+if [ ! -f "${CONFIG}" ]; then
+  red "pre-commit: .gitleaks.toml is missing from the repository root. Restore it and retry."
+  exit 1
+fi
+
+# Exit code 2 means "a finding". gitleaks exits 1 for usage errors, so a broken invocation
+# is never mistaken for a leaked credential (a scanner that cries wolf gets bypassed).
+LEAK_EXIT=2
+
+# gitleaks v8.19 renamed `protect` to `git` and moved the target from --source to a
+# positional argument; subcommand and target form are probed together.
+run_native() {
+  if gitleaks git --help >/dev/null 2>&1; then
+    gitleaks git --staged "${REPO_ROOT}" --config="${CONFIG}" \
+      --redact --no-banner --verbose --exit-code "${LEAK_EXIT}"
+  else
+    gitleaks protect --staged --source="${REPO_ROOT}" --config="${CONFIG}" \
+      --redact --no-banner --verbose --exit-code "${LEAK_EXIT}"
+  fi
+}
+
+run_docker() {
+  if docker run --rm "${IMAGE}" git --help >/dev/null 2>&1; then
+    docker run --rm -v "${REPO_ROOT}:/repo" -w /repo "${IMAGE}" git --staged /repo \
+      --config=/repo/.gitleaks.toml --redact --no-banner --verbose --exit-code "${LEAK_EXIT}"
+  else
+    docker run --rm -v "${REPO_ROOT}:/repo" -w /repo "${IMAGE}" protect --staged --source=/repo \
+      --config=/repo/.gitleaks.toml --redact --no-banner --verbose --exit-code "${LEAK_EXIT}"
+  fi
+}
+
+if command -v gitleaks >/dev/null 2>&1; then
+  SCANNER=native
+elif command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+  dim "pre-commit: gitleaks not on PATH; using the container image instead."
+  SCANNER=docker
+else
+  red "pre-commit: no secret scanner available - refusing to commit."
+  echo "Install gitleaks (https://github.com/gitleaks/gitleaks#installing) or start Docker,"
+  echo "then commit again."
+  exit 1
+fi
+
+set +e
+if [ "${SCANNER}" = native ]; then run_native; else run_docker; fi
+STATUS=$?
+set -e
+
+if [ "${STATUS}" -eq 0 ]; then
+  green "pre-commit: secret scan clean."
+  exit 0
+fi
+
+if [ "${STATUS}" -ne "${LEAK_EXIT}" ]; then
+  red "pre-commit: the secret scanner failed to run (exit ${STATUS}) - commit refused."
+  echo "This is a tooling failure, not a finding; a scanner that did not run proves nothing."
+  echo "Reproduce with more output: scripts/scan-secrets.sh --staged"
+  exit 1
+fi
+
+red "pre-commit: secrets detected in staged changes - commit refused."
+echo "If it is real: ROTATE it first (it is already on your disk), then remove it from the"
+echo "change and read it from the environment instead (see secrets.env.example)."
+echo "If it is a false positive: add a narrow, commented allowlist entry to .gitleaks.toml."
+exit 1
