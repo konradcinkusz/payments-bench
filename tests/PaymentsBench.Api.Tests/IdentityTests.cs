@@ -159,7 +159,9 @@ public sealed class IdentityTests : IDisposable
 
     private WebApplicationFactory<Program> Host(string environment, string? authority, string? issuer = null, string? audience = null, bool publishKey = false)
     {
-        var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        var baseFactory = new WebApplicationFactory<Program>();
+        _factories.Add(baseFactory);
+        var factory = baseFactory.WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment(environment);
             // Settings, not ConfigureAppConfiguration: registration reads them before the host is built.
