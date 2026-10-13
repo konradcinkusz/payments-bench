@@ -21,7 +21,7 @@ public sealed class IdentityTests : IDisposable
 
     // Generated per run and never written anywhere: no key material lives in the tree.
     private readonly RSA _signingKey = RSA.Create(2048);
-    private readonly List<WebApplicationFactory<Program>> _factories = [];
+    private readonly List<WebApplicationFactory<ApiEntryPoint>> _factories = [];
 
     public void Dispose()
     {
@@ -153,13 +153,13 @@ public sealed class IdentityTests : IDisposable
         Assert.Contains("Auth__Issuer", failure.ToString());
     }
 
-    private WebApplicationFactory<Program> Jwt() => Host("Production", Authority, Issuer, Audience, publishKey: true);
+    private WebApplicationFactory<ApiEntryPoint> Jwt() => Host("Production", Authority, Issuer, Audience, publishKey: true);
 
-    private WebApplicationFactory<Program> Development() => Host("Development", authority: null);
+    private WebApplicationFactory<ApiEntryPoint> Development() => Host("Development", authority: null);
 
-    private WebApplicationFactory<Program> Host(string environment, string? authority, string? issuer = null, string? audience = null, bool publishKey = false)
+    private WebApplicationFactory<ApiEntryPoint> Host(string environment, string? authority, string? issuer = null, string? audience = null, bool publishKey = false)
     {
-        var baseFactory = new WebApplicationFactory<Program>();
+        var baseFactory = new WebApplicationFactory<ApiEntryPoint>();
         _factories.Add(baseFactory);
         var factory = baseFactory.WithWebHostBuilder(builder =>
         {

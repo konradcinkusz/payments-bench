@@ -33,12 +33,12 @@ internal static class Samples
     public static string Unique(string prefix) => $"{prefix}-{Guid.NewGuid():N}";
 
     /// <summary>A payment walked through the domain to <paramref name="status"/>, with unique key and end-to-end id.</summary>
-    public static Payment PaymentIn(PaymentStatus status, decimal amount = 125.50m)
+    public static Payment PaymentIn(PaymentStatus status, decimal amount = 125.50m, string scheme = "sepa", DateTimeOffset? createdAt = null)
     {
-        var at = Start;
+        var at = createdAt ?? Start;
         var payment = Payment.Initiate(
             Guid.NewGuid(), Unique("key"), "hash-" + Guid.NewGuid().ToString("N"), Unique("E2E"),
-            new Money(amount, "EUR"), "DE89370400440532013000", "GB33BUKB20201555555555", "sepa", at);
+            new Money(amount, "EUR"), "DE89370400440532013000", "GB33BUKB20201555555555", scheme, at);
         if (status == PaymentStatus.Initiated)
         {
             return payment;
