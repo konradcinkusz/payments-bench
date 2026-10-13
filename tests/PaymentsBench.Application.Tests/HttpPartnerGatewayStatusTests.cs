@@ -21,8 +21,8 @@ public sealed class HttpPartnerGatewayStatusTests
             throw exception;
     }
 
-    private static HttpPartnerGateway GatewayOver(HttpMessageHandler handler) =>
-        new(new HttpClient(handler) { BaseAddress = new Uri("http://partner.simulated") });
+    private static HttpClient ClientOver(HttpMessageHandler handler) =>
+        new(handler) { BaseAddress = new Uri("http://partner.simulated") };
 
     public static TheoryData<Exception> TransportFailures => new()
     {
@@ -36,7 +36,9 @@ public sealed class HttpPartnerGatewayStatusTests
     [MemberData(nameof(TransportFailures))]
     public async Task A_failed_lookup_is_unavailable_not_a_throw_and_not_not_found(Exception failure)
     {
-        var result = await GatewayOver(new ThrowingHandler(failure)).GetStatusAsync("E2E-1", CancellationToken.None);
+        using var client = ClientOver(new ThrowingHandler(failure));
+
+        var result = await new HttpPartnerGateway(client).GetStatusAsync("E2E-1", CancellationToken.None);
 
         Assert.Equal(PartnerStatus.Unavailable, result.Status);
         Assert.Equal(failure.GetType().Name, result.ReasonCode);
@@ -47,9 +49,9 @@ public sealed class HttpPartnerGatewayStatusTests
     [InlineData(HttpStatusCode.InternalServerError)]
     public async Task A_5xx_answer_is_unavailable(HttpStatusCode code)
     {
-        var gateway = GatewayOver(new StubHandler(_ => new HttpResponseMessage(code)));
+        using var client = ClientOver(new StubHandler(_ => new HttpResponseMessage(code)));
 
-        var result = await gateway.GetStatusAsync("E2E-1", CancellationToken.None);
+        var result = await new HttpPartnerGateway(client).GetStatusAsync("E2E-1", CancellationToken.None);
 
         Assert.Equal(PartnerStatus.Unavailable, result.Status);
     }
@@ -57,9 +59,9 @@ public sealed class HttpPartnerGatewayStatusTests
     [Fact]
     public async Task Only_a_404_is_not_found()
     {
-        var gateway = GatewayOver(new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound)));
+        using var client = ClientOver(new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound)));
 
-        Assert.Equal(PartnerStatus.NotFound, (await gateway.GetStatusAsync("E2E-1", CancellationToken.None)).Status);
+        Assert.Equal(PartnerStatus.NotFound, (await new HttpPartnerGateway(client).GetStatusAsync("E2E-1", CancellationToken.None)).Status);
     }
 
     [Fact]
@@ -67,8 +69,8 @@ public sealed class HttpPartnerGatewayStatusTests
     {
         using var cancelled = new CancellationTokenSource();
         await cancelled.CancelAsync();
-        var gateway = GatewayOver(new ThrowingHandler(new TaskCanceledException()));
+        using var client = ClientOver(new ThrowingHandler(new TaskCanceledException()));
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => gateway.GetStatusAsync("E2E-1", cancelled.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new HttpPartnerGateway(client).GetStatusAsync("E2E-1", cancelled.Token));
     }
 }

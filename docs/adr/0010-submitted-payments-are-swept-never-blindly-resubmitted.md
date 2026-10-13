@@ -30,7 +30,7 @@ The recovery has to run by itself, and running it by itself must not weaken the 
    resubmits, and that resubmit's own outcome is unknown, the resolver now returns
    `ResolutionOutcome.StillUnknown`, not `SafeToResubmit`. Nothing is written; the next sweep asks
    again. The sweep counts it under that tag instead of mistaking it for a resolution.
-1. **`PartnerUnavailable` is its own outcome (the resolve-during-open-circuit defect, stream B R15).**
+1. **`PartnerUnavailable` is its own outcome (the resolve-during-open-circuit defect, stream B R16).**
    Failed submits trip the circuit breaker that `HttpPartnerGateway.GetStatusAsync` shares, and the
    lookup did not catch `BrokenCircuitException` (or a timeout or other transport failure), so
    `POST /payments/{id}/resolve` returned 500 and the sweeper would have hit the same exception.
