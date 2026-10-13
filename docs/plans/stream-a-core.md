@@ -175,6 +175,10 @@ Register: R2 moves to _Closed_ if the closing condition is met as written; a new
 that the samples are hand-written in the published shape and are not validated against the
 official schemas.
 
+### A9 - circuit-fast-fail: an open partner circuit is not retried (added) - PR: [#30](https://github.com/konradcinkusz/payments-bench/pull/30)
+
+Added during delivery after stream B's load run found a regression from A6's F-5 fix. Principle: P13, SERVICE-API-PATTERNS.md §5. Criteria: `PartnerResilience.ShouldRetry` never retries `BrokenCircuitException` or a spent total-request budget, still retries a GET's transport error, per-attempt timeout or 5xx, never retries a POST; unit tests for each case plus an open-circuit lookup that answers `Unavailable` fast. Register: R27 opened and closed.
+
 ## Out of scope
 
 A real broker (R5 stays narrowed), a real bank or scheme API (R1), load and chaos (R9, stream
@@ -190,6 +194,7 @@ B), sanctions and limits (R10), authentication, Dockerfiles, deployment and the 
 - [x] A6 scenario-runner (R3) - #23: R3 closed, fixes F-4 and F-5; R18 opened (a return has no statement line of its own); ADR 0012
 - [x] A7 outbox-contract (R5 narrowed) - #20: R5 narrowed, not closed (no broker); ADR 0010
 - [x] A8 iso20022 (R2) - #24: R2 closed; R20 opened (samples hand-written, not XSD-validated, gateway still JSON); ADR 0014
+- [x] A9 circuit-fast-fail (added during delivery) - #30: an open partner circuit is no longer retried; R27 opened and closed in the same PR
 
 ## Findings
 
@@ -205,5 +210,6 @@ What the slices caught on the way, for `docs/FINDINGS.md`. Each one is fixed unl
 | Container images failed to publish once scheme data became required: the Dockerfiles copied `src/` only | A3, Containers workflow | Fixed in #11: the Dockerfiles copy `scenarios/` |
 | `WebApplicationFactory.ConfigureAppConfiguration` applies too late for settings read while services are built: the runner's partner timeouts silently stayed at their defaults and a timeout scenario passed for the wrong reason | A6, a scenario that should have failed | Fixed in #23: `UseSetting`; recorded in ADR 0012 |
 | New register rows appended below the prose that follows the open table rendered outside it, twice | Stream lead review of #23 and #24 | Fixed in both; stream C added a site-build check (#27) |
+| The F-5 fix made the status lookup retry every exception, `BrokenCircuitException` included, so during a partner outage each `resolve` and each sweep waited out the retry backoff (p95 13 ms to 9.6 s under `ServerError`) | Stream B, `load.yml` re-run after #21 | Fixed in #30 (A9): an open circuit and a spent total budget are not retried; R27. Stream B re-runs `load.yml` to confirm |
 | CodeQL test-hygiene notes on the integration tests (an undisposed `CancellationTokenSource`, an unused assignment) | CodeQL on #13 | Open; not blocking, left for a hygiene pass |
 
