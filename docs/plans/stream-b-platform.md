@@ -68,7 +68,7 @@ Each slice is one branch `claude/stream-b/<slice>`, one PR against `main`, CI gr
 with the pr-review skill before merge. Waves respect the limit of four concurrent sessions and
 the dependency between slices.
 
-### B1 - Repo baseline (wave 1) - PR: _pending_
+### B1 - Repo baseline (wave 1) - PR: #5 (merged)
 
 Principle: P5 (secret scanner in CI), repo-baseline §1-§4 and §9.
 
@@ -94,7 +94,7 @@ Verification: `scripts/setup.sh` runs green in a fresh container; `actionlint` c
 gitleaks clean on full history locally; the new workflows green on the PR.
 Register: none closed; opens none.
 
-### B2 - Containers (wave 1) - PR: _pending_
+### B2 - Containers (wave 1) - PR: #8 (merged)
 
 Principle: P6.
 
@@ -113,7 +113,7 @@ Verification: both images build and answer `/health` locally (or in CI if Docker
 available in the session); `id` inside the container is not root.
 Register: none.
 
-### B3 - Identity: authservice and JwtBearer (wave 1) - PR: _pending_
+### B3 - Identity: authservice and JwtBearer (wave 1) - PR: #14 (merged)
 
 Principle: P5 (JWT / OIDC, asymmetric + JWKS), P8, P9; compliance checklist "exactly one
 service holds a signing key; all others validate against its JWKS endpoint".
@@ -144,7 +144,7 @@ Verification: `dotnet build -warnaserror`, `dotnet test` (new tests included).
 Register: opens a row if the partner webhook (`/partner/notifications`) remains authenticated
 by bearer token only, i.e. without partner signature verification.
 
-### B4 - Fly.io topology and tag-driven deploy (wave 2, after B2 and B3) - PR: _pending_
+### B4 - Fly.io topology and tag-driven deploy (wave 2, after B2 and B3) - PR: #18 (merged)
 
 Principle: P7, P12, shared-service-reuse §4-§5.
 
@@ -167,7 +167,7 @@ Acceptance criteria:
 Verification: actionlint clean; `flyctl config validate` where available; a dry run of the
 workflow logic (no token) green on the PR via `workflow_dispatch` or a test tag on a fork.
 
-### B5 - Observability for operations (wave 1) - PR: _pending_
+### B5 - Observability for operations (wave 1) - PR: #9 (merged)
 
 Principle: P15, metrics-exposition guide.
 
@@ -186,7 +186,7 @@ Acceptance criteria:
 Verification: build and tests green; exporter test or a curl transcript of `/metrics` in the PR.
 Register: none closed.
 
-### B6 - Load and chaos: k6 (wave 2) - PR: _pending_
+### B6 - Load and chaos: k6 (wave 2) - PR: #19 (merged)
 
 Principle: P13 (test at the layer that has the logic), register R9.
 
@@ -202,7 +202,7 @@ Acceptance criteria:
   duplicates, machine. Row narrowed, closed only if its closing condition is met.
 Verification: one real run, its summary attached to the PR.
 
-### B7 - Security review (wave 3, after B3 and B4) - PR: _pending_
+### B7 - Security review (wave 3, after B3 and B4) - PR: #29 (merged)
 
 Principle: security-review guide; P5.
 
@@ -215,13 +215,79 @@ Acceptance criteria:
 - `SECURITY.md` at the root: how to report, supported versions, what is simulated.
 - Fixes for any P1 finding in the same PR if small; otherwise register rows.
 
-### B8 - README badges (wave 3, last) - PR: _pending_
+### B8 - README badges (wave 3, last) - PR: #25 (merged)
 
 Principle: readme-badges guide. Header row plus one badge per merge-gating workflow that exists
 on `main` at the time (CI, containers, secret scan, CodeQL, lint). No deployment badge until a
 deployment exists.
 
+## Outcome
+
+| Slice | PR | What landed | Register |
+|---|---|---|---|
+| B1 baseline | #5 | gitleaks pre-commit hook and full-history CI job, `scripts/setup.sh`, CodeQL, actionlint, Dependabot, CODEOWNERS, PR template, `.gitattributes`, `secrets.env.example` | none |
+| B2 containers | #8 | multi-stage non-root Dockerfiles for the API and the simulated partner, `.dockerignore`, `containers.yml` (build, run, `/health`, uid check) | none |
+| B3 identity | #14 | JwtBearer against authservice's JWKS (RS256 only), deny by default, Development-only anonymous mode, AppHost wiring for the pinned authservice image, ADR 0015 | R13 opened |
+| B4 deploy | #18 | four annotated `fly.toml`s, `deploy.yml` (change detection, missing app always selected, GHCR build, ordered deploy, JWKS and 401 checks, token-guarded), scale and destroy workflows, `docs/DEPLOYMENT.md` | R14 opened |
+| B5 observability | #9 | probes filtered from traces, opt-in anonymous `/metrics` with bounded labels, provisioned Grafana dashboard and alert under `docs/ops/`, OTLP proved through a collector | none |
+| B6 load | #19 | `k6/payments.js` with fault-profile cycling, `scripts/load-test.sh`, manual `load.yml` | R9 closed, R15 and R16 opened |
+| B7 security | #29 | `docs/security/SECURITY-REVIEW.md` (18 findings, ledger, residual risks), `SECURITY.md`, grants for the partner webhook and back-office reads, Fly guard on the anonymous mode, 64 KiB body cap, ADR 0016 | R21-R26 opened, R13 reworded |
+| B8 badges | #25 | standard header row and one badge per merge-gating workflow | none |
+| (lead) | #28 | the telemetry test waits for the exported span instead of reading once (a flake seen on stream A's #23) | none |
+
+Proof on `main`: every merge-gating workflow green (CI, Containers, CodeQL, Secret Scan, Lint).
+`deploy.yml` dispatched without `FLY_API_TOKEN` (run 38440218587): every job green, deploy jobs
+skipped with a summary. `load.yml` dispatched twice on a GitHub-hosted runner: run 38440765949
+(before stream A's resolve fix, red on R16 exactly as recorded) and run 38442934326 (after it,
+zero real failures; red on one latency threshold, see F-B6).
+
+## Findings
+
+What stream B's builds, scans, load runs and review caught, for `docs/FINDINGS.md`:
+
+- **F-B1 - The floating SDK image ships newer analyzers than CI.** Building the images on
+  `mcr.microsoft.com/dotnet/sdk:10.0` raised CA1848/CA1873 on code that is clean under
+  `global.json`'s SDK, so the Dockerfiles publish with `TreatWarningsAsErrors=false` and CI's own
+  build stays the gate (#8).
+- **F-B2 - Resolve answered 500 while the partner circuit was open.** Found by the first k6 run:
+  every real failure was `POST /payments/{id}/resolve` under `ServerError`/`RejectAll`. Fixed by
+  stream A (A5, #21); confirmed under load by run 38442934326. Register R16 (closed).
+- **F-B3 - The simulator cannot count submissions.** It keys transfers by end-to-end id and
+  answers a repeat with the existing one, so duplicate transfers are checked indirectly. R15.
+- **F-B4 - GHCR packages start private, and Fly cannot pull a private image.** A one-time manual
+  visibility change no token can make; documented in `docs/DEPLOYMENT.md` and guarded by a
+  pre-deploy manifest check (#18). R14.
+- **F-B5 - An empty `Metrics:Prometheus:Enabled` crashed startup.** `GetValue<bool>` throws on
+  an empty string; an empty or unparseable switch now means off (#9).
+- **F-B6 - Status lookups retried while the circuit was open.** After the F-B2 fix the
+  `ServerError` profile's p95 rose from 13 ms to 9601 ms (4.7 requests/s): the resilience pipeline
+  retried `BrokenCircuitException` on the idempotent GET. Confirmed by stream A, fixed in their
+  slice A9 (its own register row). R15 records the measurement.
+- **F-B7 - The telemetry test read the exporter once.** The test client can see the response
+  before the hosting layer stops the activity; fixed at the cause (#28).
+- **F-B8 - The security review's open items.** No payment owner (BOLA) and a global idempotency
+  key (R21), end-to-end id uniqueness (R22), no rate limiting (R23), operator separation and audit
+  trail (R24), paging overflow and unbounded partner responses (R25), deployment settings that live
+  outside the tree (R26). Details and attack scenarios in `docs/security/SECURITY-REVIEW.md`.
+- **F-B9 - Three streams numbering in parallel collide.** Register rows and ADR numbers were
+  taken twice during the day (two ADRs 0008 on `main` until #29 moved identity to 0015). Numbers
+  were reserved by message between leads afterwards; a numbering check in `site:check` would make
+  it mechanical.
+
+## Open, and why
+
+- **Nothing is deployed (R14).** Needs a Fly account, `FLY_API_TOKEN` in the `production`
+  environment, the root secrets, and the GHCR packages made public once. Nothing in CI requires it.
+- **The load numbers are in memory, one instance, anonymous (R15).** The authenticated, PostgreSQL,
+  multi-instance run needs authservice running and is future work; `load.yml` is to be re-run after
+  stream A's A9.
+- **The partner webhook is bearer-authenticated, not partner-signed (R13).**
+- **R21-R26** from the security review; four are stream A's code, two need repository and
+  platform settings a person makes.
+- **The AppHost's authservice wiring compiles but has not run** (no container runtime in the
+  sessions that built it), and the Grafana compose stack is validated but not started.
+
 ## Done
 
-Every slice above ticked with its PR number, CI green on `main` including the new workflows,
-the register updated with proof, sub-sessions archived.
+Every slice above is ticked with its PR number, CI is green on `main` including the new
+workflows, the register is updated with proof, and the sub-sessions are archived.
