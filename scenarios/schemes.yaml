@@ -1,14 +1,18 @@
 # Scheme rules as data. A new scheme is a new block here, not a branch in code.
+# Each scheme names a business calendar, which lives in calendars/<name>.yaml.
 schemes:
   - name: sepa
     currency: EUR
     cutOff: "16:00"
     settlementBusinessDays: 1
+    calendar: target2
   - name: faster-payments
     currency: GBP
     cutOff: "23:59"
     settlementBusinessDays: 0
+    calendar: uk-faster-payments
   - name: swift
     currency: USD
     cutOff: "15:00"
     settlementBusinessDays: 2
+    calendar: us-fedwire
