@@ -36,6 +36,12 @@ jobs:
         env:
           PAYMENTSBENCH_TEST_POSTGRES: Host=localhost;Port=5432;Username=postgres
         run: dotnet test PaymentsBench.sln --no-build --configuration Release --logger "trx;LogFileName=results.trx"
+      # The solution-wide step above already runs this project; the duplication (about ten seconds)
+      # is accepted so that the scenario gate has a name, its own trx and its own line in the log.
+      - name: Scenarios
+        env:
+          PAYMENTSBENCH_TEST_POSTGRES: Host=localhost;Port=5432;Username=postgres
+        run: dotnet test tests/PaymentsBench.Scenarios --no-build --configuration Release --logger "trx;LogFileName=scenarios.trx"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
