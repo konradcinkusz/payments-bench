@@ -12,6 +12,9 @@ public interface IPaymentRepository
 
     Task<IReadOnlyList<Payment>> ListByStatusAsync(PaymentStatus status, CancellationToken cancellationToken);
 
+    /// <summary>Filters, then returns the requested page, newest first, ties broken by id, with totals over the filtered set.</summary>
+    Task<PaymentPage> ListAsync(PaymentQuery query, CancellationToken cancellationToken);
+
     Task AddAsync(Payment payment, CancellationToken cancellationToken);
 
     Task UpdateAsync(Payment payment, CancellationToken cancellationToken);

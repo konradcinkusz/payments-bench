@@ -26,6 +26,20 @@ public sealed class InMemoryPaymentRepository : IPaymentRepository
     public Task<IReadOnlyList<Payment>> ListByStatusAsync(PaymentStatus status, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Payment>>(_payments.Values.Where(p => p.Status == status).ToList());
 
+    public Task<PaymentPage> ListAsync(PaymentQuery query, CancellationToken cancellationToken)
+    {
+        var filtered = _payments.Values.Where(p =>
+            (query.Status is null || p.Status == query.Status)
+            && (query.Scheme is null || p.Scheme == query.Scheme)
+            && (query.EndToEndId is null || p.EndToEndId == query.EndToEndId)
+            && (query.CreatedFrom is null || p.CreatedAt >= query.CreatedFrom)
+            && (query.CreatedTo is null || p.CreatedAt <= query.CreatedTo)).ToList();
+
+        var counts = filtered.GroupBy(p => p.Status).ToDictionary(g => g.Key, g => g.Count());
+        var items = filtered.OrderByDescending(p => p.CreatedAt).ThenBy(p => p.Id).Skip(query.Skip).Take(query.Limit).ToList();
+        return Task.FromResult(new PaymentPage(items, filtered.Count, counts));
+    }
+
     public Task AddAsync(Payment payment, CancellationToken cancellationToken)
     {
         if (!_payments.TryAdd(payment.Id, payment))
