@@ -1,10 +1,7 @@
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
-using PaymentsBench.Application.Payments;
-using PaymentsBench.Application.Ports;
-using PaymentsBench.Domain;
-using PaymentsBench.Domain.Payments;
+using PaymentsBench.Iso20022;
 
 namespace PaymentsBench.Api.Errors;
 
@@ -17,20 +14,17 @@ public sealed partial class ProblemDetailsExceptionHandler(IProblemDetailsServic
 {
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
-        var (status, title, detail) = exception switch
-        {
-            PaymentNotFoundException e => (StatusCodes.Status404NotFound, "Payment not found", e.Message),
-            IdempotencyConflictException e => (StatusCodes.Status409Conflict, "Idempotency conflict", e.Message),
-            InvalidTransitionException e => (StatusCodes.Status409Conflict, "Invalid transition", e.Message),
-            ConcurrencyConflictException e => (StatusCodes.Status409Conflict, "Concurrent modification", e.Message),
-            DomainException e => (StatusCodes.Status422UnprocessableEntity, "Request cannot be processed", e.Message),
-            BadHttpRequestException e => (e.StatusCode, "Bad request", "The request could not be read."),
-            _ => (StatusCodes.Status500InternalServerError, "Internal server error", "An unexpected error occurred."),
-        };
+        var (status, title, detail) = ProblemClassifier.Classify(exception);
 
         if (status >= StatusCodes.Status500InternalServerError)
         {
             LogUnhandled(logger, exception);
+        }
+
+        var problem = new ProblemDetails { Status = status, Title = title, Detail = detail };
+        if (exception is MessageFormatException { ElementPath.Length: > 0 } format)
+        {
+            problem.Extensions["element"] = format.ElementPath;
         }
 
         httpContext.Response.StatusCode = status;
@@ -38,7 +32,7 @@ public sealed partial class ProblemDetailsExceptionHandler(IProblemDetailsServic
         {
             HttpContext = httpContext,
             Exception = exception,
-            ProblemDetails = new ProblemDetails { Status = status, Title = title, Detail = detail },
+            ProblemDetails = problem,
         });
     }
 

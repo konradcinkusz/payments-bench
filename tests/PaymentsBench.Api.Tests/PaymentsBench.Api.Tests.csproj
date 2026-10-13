@@ -13,6 +13,10 @@
     <ProjectReference Include="..\..\src\PaymentsBench.Api\PaymentsBench.Api.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <!-- The same hand-written documents the Iso20022 tests read; one copy, in that project. -->
+    <None Include="..\PaymentsBench.Iso20022.Tests\samples\*.xml" Link="samples\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
 </Project>

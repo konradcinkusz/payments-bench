@@ -21,8 +21,13 @@
       "asOf": "2026-10-13"
     },
     "api": {
-      "value": 43,
+      "value": 54,
       "source": "tests/PaymentsBench.Api.Tests",
+      "asOf": "2026-10-13"
+    },
+    "iso20022": {
+      "value": 62,
+      "source": "tests/PaymentsBench.Iso20022.Tests",
       "asOf": "2026-10-13"
     },
     "scenarios": {

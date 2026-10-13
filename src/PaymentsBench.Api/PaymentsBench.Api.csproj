@@ -4,6 +4,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\PaymentsBench.Infrastructure\PaymentsBench.Infrastructure.csproj" />
+    <ProjectReference Include="..\PaymentsBench.Iso20022\PaymentsBench.Iso20022.csproj" />
     <ProjectReference Include="..\PaymentsBench.ServiceDefaults\PaymentsBench.ServiceDefaults.csproj" />
   </ItemGroup>
   <ItemGroup>
