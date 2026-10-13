@@ -15,19 +15,24 @@
       "source": "tests/PaymentsBench.Application.Tests",
       "asOf": "2026-10-13"
     },
+    "servicedefaults": {
+      "value": 12,
+      "source": "tests/PaymentsBench.ServiceDefaults.Tests",
+      "asOf": "2026-10-13"
+    },
+    "iso20022": {
+      "value": 62,
+      "source": "tests/PaymentsBench.Iso20022.Tests",
+      "asOf": "2026-10-13"
+    },
     "integration": {
       "value": 41,
       "source": "tests/PaymentsBench.Integration.Tests",
       "asOf": "2026-10-13"
     },
     "api": {
-      "value": 54,
+      "value": 89,
       "source": "tests/PaymentsBench.Api.Tests",
-      "asOf": "2026-10-13"
-    },
-    "iso20022": {
-      "value": 62,
-      "source": "tests/PaymentsBench.Iso20022.Tests",
       "asOf": "2026-10-13"
     },
     "scenarios": {
@@ -55,16 +60,116 @@
         "title": "Docs tooling: markdownlint, link check, docs lint job"
       },
       {
+        "number": 5,
+        "title": "B1: repo baseline (secret scanning, setup script, CodeQL, lint, hygiene files)"
+      },
+      {
         "number": 6,
-        "title": "Docs: OVERVIEW, FINDINGS and START-HERE"
+        "title": "Docs: OVERVIEW, FINDINGS (F-1 to F-5) and START-HERE"
       },
       {
         "number": 7,
         "title": "Diagrams: six Mermaid sources, render and check scripts, DIAGRAMS.md"
       },
       {
+        "number": 8,
+        "title": "Add container images and a containers workflow (slice B2, P6)"
+      },
+      {
+        "number": 9,
+        "title": "B5: observability for operations (filtered traces, opt-in /metrics, provisioned Grafana)"
+      },
+      {
+        "number": 10,
+        "title": "Stream A / api-surface: manifest, validation, problem details, pagination"
+      },
+      {
+        "number": 11,
+        "title": "Stream A / A3 calendars: business calendars as dated, covered data (closes R7)"
+      },
+      {
+        "number": 12,
+        "title": "Site: generated one-pager with inline SVG, status.json, --check in CI"
+      },
+      {
+        "number": 13,
+        "title": "Stream A / persistence: EF Core migration, migration gate and PostgreSQL integration tests (closes R4)"
+      },
+      {
+        "number": 14,
+        "title": "Identity: JwtBearer against authservice JWKS (B3)"
+      },
+      {
         "number": 15,
-        "title": "PDF edition of the overview: house preamble, check-papers, Build Overview PDF workflow"
+        "title": "PDF track: house preamble, LaTeX edition of OVERVIEW, check-papers, build workflow"
+      },
+      {
+        "number": 16,
+        "title": "Publish docs: Pages workflow, README restructure, ADRs for the docs decisions"
+      },
+      {
+        "number": 17,
+        "title": "Stream C plan: tick C4, C5 and C6 with their PR numbers"
+      },
+      {
+        "number": 18,
+        "title": "B4: Fly.io topology and tag-driven deploy (P7, P12)"
+      },
+      {
+        "number": 19,
+        "title": "B6: k6 load and chaos against the simulated partner (R9)"
+      },
+      {
+        "number": 20,
+        "title": "Stream A / outbox-contract: at-least-once delivery, deduplicated by the consumer (narrows R5)"
+      },
+      {
+        "number": 21,
+        "title": "Stream A / sweeper: Submitted payments are resolved on a schedule (closes R8)"
+      },
+      {
+        "number": 22,
+        "title": "Stream A / concurrency: one of two writers on one payment loses (closes R6)"
+      },
+      {
+        "number": 23,
+        "title": "Stream A / scenario-runner: every scenario file executes end to end (closes R3; fixes F-4, fixes F-5)"
+      },
+      {
+        "number": 24,
+        "title": "Stream A / iso20022: an anti-corruption edge for pain.001 and camt.053 (closes R2)"
+      },
+      {
+        "number": 25,
+        "title": "README: complete the header badge row and badge gating workflows"
+      },
+      {
+        "number": 26,
+        "title": "Add the Playwright end-to-end suite and its CI job"
+      },
+      {
+        "number": 27,
+        "title": "site-build: fail when a register row sits outside the register table"
+      },
+      {
+        "number": 28,
+        "title": "Wait for the /ping span before asserting probes are untraced"
+      },
+      {
+        "number": 29,
+        "title": "B7: security review, SECURITY.md, scoped grants for webhook and back-office reads"
+      },
+      {
+        "number": 30,
+        "title": "Stream A / circuit-fast-fail: an open partner circuit is not retried"
+      },
+      {
+        "number": 31,
+        "title": "Stream B plan: tick B1-B8 with their PRs, record findings and what is open"
+      },
+      {
+        "number": 32,
+        "title": "Stream A plan: tick every slice with its PR and record the findings"
       }
     ],
     "source": "docs/plans",

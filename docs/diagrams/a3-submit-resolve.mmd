@@ -2,6 +2,8 @@ sequenceDiagram
     participant C as Client
     participant A as API
     participant H as SubmitPaymentHandler
+    participant W as SubmittedPaymentSweeper
+    participant SW as SweepSubmittedPaymentsHandler
     participant R as ResolveSubmittedPaymentHandler
     participant S as Store, IOutbox, IUnitOfWork
     participant G as HttpPartnerGateway
@@ -22,18 +24,27 @@ sequenceDiagram
         G-->>H: SubmitOutcome.Rejected
         H->>S: MarkRejected, Postings.Release, enqueue event, CommitAsync
     else Unknown
-        P--xG: timeout, dropped connection or 5xx
+        P--xG: timeout, dropped connection, 5xx or open circuit
         G-->>H: SubmitOutcome.Unknown
         Note over H,S: Nothing is written. The payment stays Submitted.
     end
     A-->>C: payment as it now stands
 
-    Note over C,P: Later, recovery of a payment still Submitted
+    Note over C,P: Later, recovery of a payment still Submitted: by request or by the sweep
     C->>A: POST /payments/id/resolve
     A->>R: HandleAsync(ResolveSubmittedPayment)
+    W->>SW: every Sweeper:Interval, HandleAsync(SweepSubmittedPayments)
+    SW->>S: ListSubmittedBeforeAsync (older than Sweeper:MinimumAge, oldest first, up to Sweeper:BatchSize)
+    SW->>R: ISubmittedPaymentResolver.ResolveAsync, one DI scope per payment
+    Note over SW,R: A resolve that throws is recorded in SweepResult.Failures and the batch goes on
+    R->>S: GetAsync, not Submitted gives ResolutionOutcome.AlreadyResolved
     R->>G: GetStatusAsync(end-to-end id)
-    G->>P: GET /transfers/end-to-end id (idempotent, retried on 5xx only, see F-5)
-    alt NotFound
+    G->>P: GET /transfers/end-to-end id (retried on transport error, attempt timeout or 5xx, never an open circuit, never a POST)
+    alt PartnerStatus.Unavailable
+        P--xG: open circuit, timeout, transport failure or 5xx
+        G-->>R: PartnerStatus.Unavailable (never NotFound)
+        Note over R,S: Nothing is written. ResolutionOutcome.PartnerUnavailable, payment stays Submitted, a later resolve or sweep asks again.
+    else PartnerStatus.NotFound
         P-->>G: 404
         G-->>R: PartnerStatus.NotFound
         R->>G: SubmitAsync with the same end-to-end id
@@ -41,15 +52,17 @@ sequenceDiagram
         alt resubmit Accepted or Rejected
             P-->>G: 2xx or 422
             R->>S: MarkAccepted, or MarkRejected plus Postings.Release, CommitAsync
-        else resubmit Unknown (F-3)
-            P--xG: timeout, dropped connection or 5xx
+        else resubmit Unknown
+            P--xG: timeout, dropped connection, 5xx or open circuit
             G-->>R: SubmitOutcome.Unknown
-            Note over R,S: Nothing is written. Returns SafeToResubmit, payment stays Submitted.
+            Note over R,S: Nothing is written. ResolutionOutcome.StillUnknown, payment stays Submitted.
         end
     else Accepted, Settled or Rejected
         P-->>G: status
         R->>S: apply it (Settled posts Postings.Settle, Rejected posts Postings.Release), CommitAsync
     else Returned
         P-->>G: status Returned
-        R-->>A: refused with an error, nothing written
+        R-->>A: InvalidOperationException, nothing written
     end
+    SW-->>W: SweepResult (Examined, Outcomes by ResolutionOutcome, Failures, oldest Submitted age)
+    R-->>A: ResolutionOutcome (Accepted, Settled, Rejected, AlreadyResolved, StillUnknown, PartnerUnavailable)

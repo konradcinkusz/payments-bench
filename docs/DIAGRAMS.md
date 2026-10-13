@@ -59,13 +59,15 @@ stateDiagram-v2
 
 ### A3. Submit and resolve
 
-`Submitted` is committed before the partner call; the three submit outcomes (Accepted, Rejected, Unknown) and the resolver, which asks by end-to-end id and resubmits, with the same id, only on `NotFound`. The partner is the simulated bank. Source: `SubmitPayment.cs`, `ResolveSubmittedPayment.cs` and `HttpPartnerGateway.cs`.
+`Submitted` is committed before the partner call; the three submit outcomes (Accepted, Rejected, Unknown) and the resolver, which asks by end-to-end id and resubmits, with the same id, only on `PartnerStatus.NotFound`. An unreachable partner is `PartnerStatus.Unavailable` (`ResolutionOutcome.PartnerUnavailable`), never `NotFound`; a resubmit with no answer is `ResolutionOutcome.StillUnknown`. The resolver runs on request (`POST /payments/{id}/resolve`) and on a schedule (`SubmittedPaymentSweeper`, then `SweepSubmittedPaymentsHandler`). The partner is the simulated bank. Source: `SubmitPayment.cs`, `ResolveSubmittedPayment.cs`, `SweepSubmittedPayments.cs`, `HttpPartnerGateway.cs`, `PartnerResilience.cs` and `src/PaymentsBench.Infrastructure/Sweeping/`.
 
 ```mermaid
 sequenceDiagram
     participant C as Client
     participant A as API
     participant H as SubmitPaymentHandler
+    participant W as SubmittedPaymentSweeper
+    participant SW as SweepSubmittedPaymentsHandler
     participant R as ResolveSubmittedPaymentHandler
     participant S as Store, IOutbox, IUnitOfWork
     participant G as HttpPartnerGateway
@@ -86,18 +88,27 @@ sequenceDiagram
         G-->>H: SubmitOutcome.Rejected
         H->>S: MarkRejected, Postings.Release, enqueue event, CommitAsync
     else Unknown
-        P--xG: timeout, dropped connection or 5xx
+        P--xG: timeout, dropped connection, 5xx or open circuit
         G-->>H: SubmitOutcome.Unknown
         Note over H,S: Nothing is written. The payment stays Submitted.
     end
     A-->>C: payment as it now stands
 
-    Note over C,P: Later, recovery of a payment still Submitted
+    Note over C,P: Later, recovery of a payment still Submitted: by request or by the sweep
     C->>A: POST /payments/id/resolve
     A->>R: HandleAsync(ResolveSubmittedPayment)
+    W->>SW: every Sweeper:Interval, HandleAsync(SweepSubmittedPayments)
+    SW->>S: ListSubmittedBeforeAsync (older than Sweeper:MinimumAge, oldest first, up to Sweeper:BatchSize)
+    SW->>R: ISubmittedPaymentResolver.ResolveAsync, one DI scope per payment
+    Note over SW,R: A resolve that throws is recorded in SweepResult.Failures and the batch goes on
+    R->>S: GetAsync, not Submitted gives ResolutionOutcome.AlreadyResolved
     R->>G: GetStatusAsync(end-to-end id)
-    G->>P: GET /transfers/end-to-end id (idempotent, retried on 5xx only, see F-5)
-    alt NotFound
+    G->>P: GET /transfers/end-to-end id (retried on transport error, attempt timeout or 5xx, never an open circuit, never a POST)
+    alt PartnerStatus.Unavailable
+        P--xG: open circuit, timeout, transport failure or 5xx
+        G-->>R: PartnerStatus.Unavailable (never NotFound)
+        Note over R,S: Nothing is written. ResolutionOutcome.PartnerUnavailable, payment stays Submitted, a later resolve or sweep asks again.
+    else PartnerStatus.NotFound
         P-->>G: 404
         G-->>R: PartnerStatus.NotFound
         R->>G: SubmitAsync with the same end-to-end id
@@ -105,23 +116,25 @@ sequenceDiagram
         alt resubmit Accepted or Rejected
             P-->>G: 2xx or 422
             R->>S: MarkAccepted, or MarkRejected plus Postings.Release, CommitAsync
-        else resubmit Unknown (F-3)
-            P--xG: timeout, dropped connection or 5xx
+        else resubmit Unknown
+            P--xG: timeout, dropped connection, 5xx or open circuit
             G-->>R: SubmitOutcome.Unknown
-            Note over R,S: Nothing is written. Returns SafeToResubmit, payment stays Submitted.
+            Note over R,S: Nothing is written. ResolutionOutcome.StillUnknown, payment stays Submitted.
         end
     else Accepted, Settled or Rejected
         P-->>G: status
         R->>S: apply it (Settled posts Postings.Settle, Rejected posts Postings.Release), CommitAsync
     else Returned
         P-->>G: status Returned
-        R-->>A: refused with an error, nothing written
+        R-->>A: InvalidOperationException, nothing written
     end
+    SW-->>W: SweepResult (Examined, Outcomes by ResolutionOutcome, Failures, oldest Submitted age)
+    R-->>A: ResolutionOutcome (Accepted, Settled, Rejected, AlreadyResolved, StillUnknown, PartnerUnavailable)
 ```
 
 ### A4. Outbox and inbox
 
-Events are written in the same commit as the state change; `OutboxDispatcher` publishes at least once, to a log line today (register R5: no broker is wired); partner notifications are deduplicated by notification id in the inbox. Source: `OutboxDispatcher.cs` and `ApplyPartnerNotification.cs`.
+Events are written in the same commit as the state change; `OutboxDispatcher` (after `MigrationGate`) publishes at least once through the `IEventPublisher` that `Outbox:Publisher` selects: `log` (a log line, the default) or `channel` (a bounded in-process channel read by `DedupingConsumer`, which drops a repeated message id). Register R5 is narrowed, not closed: no broker has carried an event. Partner notifications are deduplicated by notification id in the inbox. Source: `OutboxDispatcher.cs`, `OutboxBatchDispatcher.cs`, `OutboxRegistration.cs`, `DedupingConsumer.cs`, `MigrationGate.cs` and `ApplyPartnerNotification.cs`.
 
 ```mermaid
 flowchart TB
@@ -133,15 +146,30 @@ flowchart TB
     end
 
     subgraph D["OutboxDispatcher (PostgreSQL mode only)"]
-        POLL["every 2 s: take up to 100 undispatched<br/>messages, oldest OccurredAt first"]
-        PUB["IEventPublisher.PublishAsync"]
-        MARK["set DispatchedAt, SaveChangesAsync"]
-        POLL --> PUB --> MARK
+        GATE["MigrationGate.WaitAsync<br/>no batch before the schema is ready"]
+        POLL["every 2 s: OutboxBatchDispatcher.DispatchBatchAsync<br/>up to 100 undispatched messages, oldest OccurredAt first"]
+        PUB["IEventPublisher.PublishAsync<br/>chosen by Outbox:Publisher"]
+        MARK["set DispatchedAt, SaveChangesAsync<br/>after the publish returned"]
+        GATE --> POLL --> PUB --> MARK
     end
 
     OB --> POLL
-    PUB --> LOG["LoggingEventPublisher: a log line today<br/>no broker wired, register R5"]
-    MARK -. "a crash before this line<br/>republishes the message:<br/>at least once" .-> POLL
+    PUB -- "log (default)" --> LOG["LoggingEventPublisher: a log line<br/>nothing consumes it"]
+    PUB -- "channel" --> CH["ChannelEventPublisher<br/>bounded in-process channel, not durable<br/>stands in for a broker"]
+    MARK -. "a crash before this line<br/>republishes the message with the same id:<br/>at least once" .-> POLL
+
+    subgraph DC["Consumer, Outbox:Publisher = channel only"]
+        DEDUP{"DedupingConsumer<br/>IProcessedMessageStore.Contains<br/>message id = outbox row id"}
+        HAND["IOutboxMessageHandler.HandleAsync<br/>then the id is recorded"]
+        DROP["duplicate dropped and counted<br/>DuplicatesDropped"]
+        DEDUP -- "new" --> HAND
+        DEDUP -- "seen" --> DROP
+    end
+
+    CH --> DEDUP
+    NOBROKER["No broker has carried an event:<br/>register R5 is narrowed, not closed"]
+    LOG -.-> NOBROKER
+    CH -.-> NOBROKER
 
     subgraph I["Read side: POST /partner/notifications"]
         N["PartnerNotification<br/>NotificationId, EndToEndId, Kind"]
@@ -160,56 +188,74 @@ flowchart TB
 
 ### A5. Reconciliation
 
-A value date's statement against the payments settled with that value date: matches are counted, and the three `BreakKind` values become a work queue. Source: `src/PaymentsBench.Application/Reconciliation/ReconciliationService.cs`.
+A value date's statement against the payments settled on that value date, whatever happened to them afterwards (`Settled` and `Returned`, finding F-4 fixed): matches are counted, and the three `BreakKind` values become a work queue. The statement is JSON or camt.053 as `Partner:StatementFormat` says. A return has no statement line of its own (register R18). Source: `src/PaymentsBench.Application/Reconciliation/ReconciliationService.cs` and `src/PaymentsBench.Infrastructure/Partner/HttpStatementSource.cs`.
 
 ```mermaid
 flowchart TB
     RUN["POST /reconciliation/runs/date<br/>ReconciliationService.ReconcileAsync"]
-    ST["statement for the value date<br/>IStatementSource.GetAsync<br/>from the partner simulator (simulated bank)<br/>GET /statements/date"]
-    SP["settled payments with that value date<br/>IPaymentRepository.ListByStatusAsync Settled<br/>filtered on ValueDate"]
+    ST["statement for the value date<br/>IStatementSource.GetAsync (HttpStatementSource)<br/>from the partner simulator (simulated bank)<br/>GET /statements/date"]
+    FMT["Partner:StatementFormat<br/>json (default) or camt053<br/>camt.053 is read by PaymentsBench.Iso20022"]
+    SP["payments settled on that value date<br/>IPaymentRepository.ListByStatusAsync<br/>Settled plus Returned, filtered on ValueDate<br/>a later return does not move the settlement day (F-4 fixed)"]
 
     RUN --> ST
+    FMT -.-> ST
     RUN --> SP
     ST --> DEB["Debit lines only, matched by end-to-end id"]
     SP --> DEB
 
-    DEB --> Q1{"statement line has a<br/>settled payment?"}
+    DEB --> Q1{"statement line has a<br/>payment settled that day?"}
     Q1 -- "no" --> B1["break OnStatementOnly<br/>StatementAmount set, LedgerAmount empty"]
     Q1 -- "yes" --> Q2{"same amount<br/>and currency?"}
     Q2 -- "no" --> B3["break AmountMismatch<br/>both amounts on the row"]
     Q2 -- "yes" --> M["matched, counted"]
-    DEB --> Q3{"settled payment missing<br/>from the statement?"}
+    DEB --> Q3{"payment settled that day<br/>missing from the statement?"}
     Q3 -- "yes" --> B2["break InLedgerOnly<br/>LedgerAmount set, StatementAmount empty"]
 
     B1 --> WQ["ReconciliationReport: Matched count<br/>plus Breaks, a work queue and not an alert"]
     B2 --> WQ
     B3 --> WQ
     M --> WQ
+    WQ -.-> R18["Not proved, register R18: a return has no<br/>statement line of its own, so the return day<br/>cannot reconcile"]
 ```
 
 ### A6. Delivery topology
 
-What `AppHost` composes (PostgreSQL, the simulated partner, the API, the Aspire dashboard over OTLP) and the degraded in-memory mode when there is no `payments` connection string. Only what exists on `main` is drawn. Source: `src/PaymentsBench.AppHost/AppHost.cs` and `InfrastructureRegistration.cs`.
+What `AppHost` composes (PostgreSQL, the simulated partner, the API, authservice when `Parameters:auth-signing-key` is set, the Aspire dashboard over OTLP), the Fly.io estate as `flyio/` declares it (declared, never deployed: register R14) and the degraded in-memory mode when there is no `payments` connection string. Source: `src/PaymentsBench.AppHost/AppHost.cs`, `flyio/*.fly.toml` and `InfrastructureRegistration.cs`.
 
 ```mermaid
 flowchart TB
     subgraph APPHOST["PaymentsBench.AppHost (Aspire composition root)"]
-        PG[("postgres<br/>AddPostgres with data volume<br/>database: payments")]
+        PG[("postgres<br/>AddPostgres with data volume<br/>databases: payments, authdb")]
         PART["partner<br/>PaymentsBench.PartnerSimulator<br/>partner simulator (simulated bank)"]
         API["api<br/>PaymentsBench.Api<br/>Partner__BaseAddress=http://partner"]
+        AUTH["authservice (container, pinned tag)<br/>declared only when Parameters:auth-signing-key is set<br/>otherwise the api runs its Development policy, anonymous allowed"]
         DASH["Aspire dashboard<br/>traces, metrics, logs over OTLP"]
     end
 
     API -- "ConnectionStrings:payments<br/>WithReference, WaitFor" --> PG
     API -- "HTTP: /transfers, /statements<br/>WithReference, WaitFor" --> PART
+    API -- "Auth__Authority: JWKS, JwtBearer<br/>WaitFor" --> AUTH
+    AUTH -- "ConnectionStrings:authdb<br/>WaitFor" --> PG
     API -. "OTLP" .-> DASH
     PART -. "OTLP" .-> DASH
     CLI["client, curl"] --> API
     CLI -- "PUT /faults, settle, return" --> PART
 
+    subgraph FLY["Fly.io, region fra, flyio/*.fly.toml: declared, never deployed (register R14)"]
+        direction TB
+        FAPI["payments-bench-api<br/>flyio/api.fly.toml, public, force_https<br/>health check GET /health<br/>Partner__BaseAddress=http://payments-bench-partner.internal:8080"]
+        FAUTH["payments-bench-authservice<br/>flyio/authservice.fly.toml, public<br/>health check GET /health/ready"]
+        FPART["payments-bench-partner<br/>flyio/partner.fly.toml<br/>partner simulator (simulated bank), in-memory state<br/>reached over .internal; no public address expected (R26)"]
+        FPG[("payments-bench-postgres<br/>flyio/postgres.fly.toml<br/>postgres:17-alpine, volume pgdata<br/>databases: payments, authservice")]
+        FAPI -- "Auth__Authority https" --> FAUTH
+        FAPI -- "6PN, .internal" --> FPART
+        FAPI -- "payments database" --> FPG
+        FAUTH -- "authservice database" --> FPG
+    end
+
     subgraph DEG["Degraded mode: no payments connection string"]
         direction TB
-        APID["api, run alone with dotnet run<br/>in-memory repository, ledger, outbox, inbox<br/>no migration, no OutboxDispatcher<br/>warning in the log at start-up"]
+        APID["api, run alone with dotnet run<br/>in-memory repository, ledger, outbox, inbox<br/>no migration, no OutboxDispatcher<br/>SubmittedPaymentSweeper still runs (MigrationGate.Completed)<br/>warning in the log at start-up"]
         PARTD["partner simulator (simulated bank)<br/>dotnet run, port 5101"]
         APID -- "HTTP, port 5100 to 5101" --> PARTD
     end
