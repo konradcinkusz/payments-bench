@@ -35,10 +35,10 @@ before every merge, never revert their lines); `package.json` for documentation 
 
 | # | Slice | Branch | Owner | Depends on | PR |
 |---|---|---|---|---|---|
-| C0 | This plan | `claude/stream-c/plan` | lead | - | |
-| C1 | Doc tooling: `package.json` (pinned `markdownlint-cli2`, `@mermaid-js/mermaid-cli`), `.markdownlint-cli2.jsonc` + `.markdownlint.jsonc`, `scripts/check-links.mjs`, a `lint-docs` job in `ci.yml`, existing Markdown made lint-clean, LaTeX block in `.gitignore` | `claude/stream-c/tooling` | sub-session | C0 | |
-| C2 | Diagrams: `docs/diagrams/*.mmd` (money path, state machine, submit/resolve sequence, outbox/inbox, reconciliation, delivery topology), `scripts/render-diagrams.mjs`, `scripts/check-diagrams.mjs`, `docs/DIAGRAMS.md`, `lint:diagrams` in the lint job | `claude/stream-c/diagrams` | sub-session | C1 | |
-| C3 | `docs/START-HERE.md` (Diátaxis map), `docs/FINDINGS.md` (F-1, F-2 with evidence), `docs/OVERVIEW.md` (long-form source of truth) | `claude/stream-c/overview` | lead | C1 | |
+| C0 | This plan | `claude/stream-c/plan` | lead | - | #2 (merged) |
+| C1 | Doc tooling: `package.json` (pinned `markdownlint-cli2`, `@mermaid-js/mermaid-cli`), `.markdownlint-cli2.jsonc` + `.markdownlint.jsonc`, `scripts/check-links.mjs`, a `lint-docs` job in `ci.yml`, existing Markdown made lint-clean, LaTeX block in `.gitignore` | `claude/stream-c/tooling` | sub-session | C0 | #4 (merged) |
+| C2 | Diagrams: `docs/diagrams/*.mmd` (money path, state machine, submit/resolve sequence, outbox/inbox, reconciliation, delivery topology), `scripts/render-diagrams.mjs`, `scripts/check-diagrams.mjs`, `docs/DIAGRAMS.md`, `lint:diagrams` in the lint job | `claude/stream-c/diagrams` | sub-session | C1 | #7 (merged) |
+| C3 | `docs/START-HERE.md` (Diátaxis map), `docs/FINDINGS.md` (F-1, F-2 with evidence), `docs/OVERVIEW.md` (long-form source of truth) | `claude/stream-c/overview` | lead | C1 | #6 (merged) |
 | C4 | PDF track: `docs/papers/house-preamble.tex`, `docs/papers/payments-bench-overview.tex`, `scripts/check-papers.mjs` in the lint job, `.github/workflows/build-overview-pdf.yml` (dispatch, PRs on `docs/papers/**` or `docs/diagrams/**` as artifact, `v*` tags as release asset); compiled locally before merge | `claude/stream-c/pdf` | lead | C2, C3 | |
 | C5 | Site: `scripts/site-build.mjs` (Node stdlib only, `--check`), `docs/site/source.html`, `docs/site/status.json`, generated `docs/index.html` with hand-drawn inline SVG, `site:check` in the lint job | `claude/stream-c/site` | sub-session | C1 | |
 | C6 | Publishing and front door: `.github/workflows/deploy-pages.yml`, `docs/DEPLOYMENT-DOCS.md` (the one manual Pages step), `README.md` restructured on agent-eval-bench's headings, ADRs for this stream's decisions at the next free numbers | `claude/stream-c/publish` | sub-session | C3, C4, C5 | |

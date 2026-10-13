@@ -48,3 +48,5 @@ jobs:
         run: npm run lint:links
       - name: Check diagrams
         run: npm run lint:diagrams
+      - name: Check papers
+        run: npm run lint:papers
