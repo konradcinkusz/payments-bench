@@ -10,11 +10,13 @@ public sealed record SweepFailure(Guid PaymentId, Exception Exception);
 /// <param name="Examined">How many payments the batch selected.</param>
 /// <param name="Outcomes">Resolutions by <see cref="ResolutionOutcome"/> name; failures are not in here.</param>
 /// <param name="Failures">Payments whose resolve threw, with the exception.</param>
-/// <param name="OldestSubmittedAge">The age of the oldest payment still at Submitted after the batch; zero when none.</param>
+/// <param name="OldestSubmittedUpdatedAt">The last update of the oldest payment still at Submitted after the batch; null when none.</param>
+/// <param name="OldestSubmittedAge">That payment's age when the sweep finished; zero when none.</param>
 public sealed record SweepResult(
     int Examined,
     IReadOnlyDictionary<ResolutionOutcome, int> Outcomes,
     IReadOnlyList<SweepFailure> Failures,
+    DateTimeOffset? OldestSubmittedUpdatedAt,
     TimeSpan OldestSubmittedAge);
 
 /// <summary>
@@ -63,6 +65,6 @@ public sealed class SweepSubmittedPaymentsHandler(IPaymentRepository payments, I
             ? window.OldestUpdatedAt
             : (await payments.ListSubmittedBeforeAsync(clock.UtcNow - command.MinimumAge, 0, cancellationToken)).OldestUpdatedAt;
         var age = oldest is { } at ? clock.UtcNow - at : TimeSpan.Zero;
-        return new SweepResult(window.Ids.Count, outcomes, failures, age < TimeSpan.Zero ? TimeSpan.Zero : age);
+        return new SweepResult(window.Ids.Count, outcomes, failures, oldest, age < TimeSpan.Zero ? TimeSpan.Zero : age);
     }
 }

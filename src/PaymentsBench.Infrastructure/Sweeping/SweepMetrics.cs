@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using PaymentsBench.Application.Payments;
+using PaymentsBench.Application.Ports;
 
 namespace PaymentsBench.Infrastructure.Sweeping;
 
@@ -17,18 +18,24 @@ public sealed class SweepMetrics
     public const string FailedOutcome = "failed";
 
     private readonly Counter<long> _resolved;
-    private double _oldestAgeSeconds;
+    private readonly IClock _clock;
+    private long _oldestUpdatedAtTicks; // UTC ticks; 0 means no Submitted payment
 
-    public SweepMetrics(IMeterFactory meterFactory)
+    public SweepMetrics(IMeterFactory meterFactory, IClock clock)
     {
+        _clock = clock;
         var meter = meterFactory.Create(MeterName);
         _resolved = meter.CreateCounter<long>(ResolvedName, unit: "{payment}", description: "Payments handled by a sweep, tagged by resolution outcome or 'failed'.");
-        meter.CreateObservableGauge(OldestAgeName, () => Volatile.Read(ref _oldestAgeSeconds), unit: "s", description: "Age of the oldest payment still at Submitted as of the last sweep; 0 when none.");
+        meter.CreateObservableGauge(OldestAgeName, ObserveOldestAgeSeconds, unit: "s", description: "Age of the oldest payment still at Submitted as of the last sweep; 0 when none.");
     }
+
+    // The oldest payment is found by a sweep, but its age is read live: a sweeper that stops keeps the gauge rising while that payment waits.
+    private double ObserveOldestAgeSeconds() =>
+        Volatile.Read(ref _oldestUpdatedAtTicks) is var ticks and > 0 ? Math.Max(0, (_clock.UtcNow.UtcTicks - ticks) / (double)TimeSpan.TicksPerSecond) : 0;
 
     public void Record(SweepResult result)
     {
-        Volatile.Write(ref _oldestAgeSeconds, result.OldestSubmittedAge.TotalSeconds);
+        Volatile.Write(ref _oldestUpdatedAtTicks, result.OldestSubmittedUpdatedAt?.UtcTicks ?? 0);
         foreach (var (outcome, count) in result.Outcomes)
         {
             _resolved.Add(count, new KeyValuePair<string, object?>("outcome", outcome.ToString()));

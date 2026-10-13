@@ -153,6 +153,11 @@ public sealed class SweepSubmittedPaymentsTests
         // The payment that stays Submitted is the oldest one left: two minutes old, the sweep did not touch its UpdatedAt.
         Assert.Equal(120, metrics.OldestAgeSeconds);
 
+        // Between sweeps the oldest payment keeps ageing, so a sweeper that stopped would show on the gauge.
+        sweep.Host.Clock.UtcNow += TimeSpan.FromSeconds(30);
+        metrics.Observe();
+        Assert.Equal(150, metrics.OldestAgeSeconds);
+
         // Resolved by hand, the gauge falls to zero at the next sweep.
         sweep.Host.Partner.StatusAnswers.Enqueue(new PartnerStatusResult(PartnerStatus.Accepted, "P-2", null, null));
         await sweep.Sweeper.SweepOnceAsync(CancellationToken.None);
