@@ -22,7 +22,7 @@ this estate. It signs RS256 and publishes `/.well-known/openid-configuration` an
    for another product on the same authservice is refused.
 1. **Fallback policy = authenticated user.** Every endpoint needs a bearer token unless it says
    otherwise. `/health` and `/alive` are anonymous; OpenAPI is anonymous in Development only.
-   `/partner/notifications` falls under the fallback policy (see R12).
+   `/partner/notifications` falls under the fallback policy (see R13).
 1. **No `Auth:Authority`:**
    - Development logs a warning (`auth: development-policy (anonymous allowed)`) and allows
      anonymous requests, so `dotnet run` and the CI container smoke test need no identity service.
@@ -45,7 +45,7 @@ the point, and it is made visible at the warning level on every start.
 
 ## Consequences
 
-- Every client, including the notification sender, needs a token from authservice (R12).
+- Every client, including the notification sender, needs a token from authservice (R13).
 - The deploy slice sets `ASPNETCORE_ENVIRONMENT=Production` on Fly, so a missing authority there fails the deploy loudly.
 - The Development policy is a property of the environment name. A deployment that sets
   `ASPNETCORE_ENVIRONMENT=Development` is open; the deployment slice must not do that.

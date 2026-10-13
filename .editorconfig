@@ -22,3 +22,8 @@ dotnet_diagnostic.CA1034.severity = none
 dotnet_diagnostic.CA1062.severity = none
 dotnet_diagnostic.CA1724.severity = none
 dotnet_diagnostic.CA1812.severity = none
+
+# EF Core scaffolds these files; regenerate them with `dotnet ef`, never hand-edit or restyle them.
+# Narrowly scoped: only the Migrations folder is treated as generated.
+[**/Migrations/*.cs]
+generated_code = true
