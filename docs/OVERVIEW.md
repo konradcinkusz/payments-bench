@@ -507,9 +507,29 @@ and presentation editions that add nothing the overview does not contain.
 
 ## 20. Getting the PDF
 
-A LaTeX edition of this document, built by a GitHub Actions workflow, is planned as slice C4 in
-[`plans/stream-c-docs.md`](plans/stream-c-docs.md). It does not exist yet; this section will say how
-to get it once it has merged.
+A LaTeX edition of this document lives at
+[`papers/payments-bench-overview.tex`](papers/payments-bench-overview.tex). It is a curated
+presentation of this file, introduces no fact this file does not contain, and states in its own
+header that it is a project overview, not a research paper. It uses the house preamble
+([`papers/house-preamble.tex`](papers/house-preamble.tex), copied unmodified from
+architecture-standards and checked by digest in `scripts/check-papers.mjs`) and includes the
+diagrams from [`diagrams/`](diagrams/) rendered to vector PDF. The PDF is build output and never
+committed.
+
+The **Build Overview PDF** workflow (`.github/workflows/build-overview-pdf.yml`) builds it:
+
+1. Open the repository's **Actions** tab and select **Build Overview PDF**.
+1. Click **Run workflow**, or open any pull request that touches `docs/papers/` or
+   `docs/diagrams/` (the workflow runs on those automatically).
+1. Download `PaymentsBench_Overview_PDF` from the run's **Artifacts** section.
+
+On a `v*` tag the same workflow attaches `PaymentsBench_Overview.pdf` to the GitHub Release.
+Locally, with Node and a TeX distribution installed:
+
+```bash
+npm ci && npm run render:diagrams
+cd docs/papers && latexmk -pdf payments-bench-overview.tex
+```
 
 ## 21. Getting the site
 
