@@ -238,8 +238,9 @@ deployment exists.
 Proof on `main`: every merge-gating workflow green (CI, Containers, CodeQL, Secret Scan, Lint).
 `deploy.yml` dispatched without `FLY_API_TOKEN` (run 38440218587): every job green, deploy jobs
 skipped with a summary. `load.yml` dispatched twice on a GitHub-hosted runner: run 38440765949
-(before stream A's resolve fix, red on R16 exactly as recorded) and run 38442934326 (after it,
-zero real failures; red on one latency threshold, see F-B6).
+(before stream A's resolve fix, red on R16 exactly as recorded), run 38442934326 (after it,
+zero real failures; red on one latency threshold, see F-B6) and run 38446330396 (after A9, every
+threshold green).
 
 ## Findings
 
@@ -262,7 +263,7 @@ What stream B's builds, scans, load runs and review caught, for `docs/FINDINGS.m
 - **F-B6 - Status lookups retried while the circuit was open.** After the F-B2 fix the
   `ServerError` profile's p95 rose from 13 ms to 9601 ms (4.7 requests/s): the resilience pipeline
   retried `BrokenCircuitException` on the idempotent GET. Confirmed by stream A, fixed in their
-  slice A9 (its own register row). R15 records the measurement.
+  slice A9 (its own register row); `load.yml` run 38446330396 after it passed every threshold (`ServerError` p95 11 ms). R15 records both measurements.
 - **F-B7 - The telemetry test read the exporter once.** The test client can see the response
   before the hosting layer stops the activity; fixed at the cause (#28).
 - **F-B8 - The security review's open items.** No payment owner (BOLA) and a global idempotency
@@ -279,8 +280,7 @@ What stream B's builds, scans, load runs and review caught, for `docs/FINDINGS.m
 - **Nothing is deployed (R14).** Needs a Fly account, `FLY_API_TOKEN` in the `production`
   environment, the root secrets, and the GHCR packages made public once. Nothing in CI requires it.
 - **The load numbers are in memory, one instance, anonymous (R15).** The authenticated, PostgreSQL,
-  multi-instance run needs authservice running and is future work; `load.yml` is to be re-run after
-  stream A's A9.
+  multi-instance run needs authservice running and is future work.
 - **The partner webhook is bearer-authenticated, not partner-signed (R13).**
 - **R21-R26** from the security review; four are stream A's code, two need repository and
   platform settings a person makes.
