@@ -147,7 +147,7 @@ documents what is built and what has never run. The approach is reproduced; the 
 - **No real bank, scheme or sandbox connection.** The partner is simulated, and the bench stops
   at the gateway interface (R1).
 - **No sanctions, AML or limits.** Out of scope; stays open as a statement of scope (R10).
-- **No frontend, no customer or account management, no authentication.**
+- **No frontend, no customer or account management.**
 - **No claim of production readiness.** [`docs/OVERVIEW.md`](docs/OVERVIEW.md) section 15 says
   what would have to change.
 
