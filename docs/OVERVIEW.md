@@ -483,6 +483,9 @@ open as a statement of scope.
 | [0001](adr/0001-no-blind-resubmit.md) | An unknown submit outcome is never retried blind; the resolver asks the partner and resubmits only on `NotFound`. |
 | [0002](adr/0002-double-entry-ledger.md) | Money is a double-entry, append-only ledger; balances are derived. |
 | [0003](adr/0003-reconciliation-produces-a-work-queue.md) | Reconciliation produces breaks, not alerts. |
+| [0004](adr/0004-the-overview-pdf-is-built-on-demand.md) | The overview PDF is built on demand, on pull requests touching its sources, and on tags; never committed. |
+| [0005](adr/0005-the-documentation-site-is-generated.md) | The documentation site is generated from one source and one facts file, and checked for staleness in CI. |
+| [0006](adr/0006-the-site-loads-no-external-resource.md) | The site loads no external resource and works from `file://`. |
 
 ## 18. Non-goals
 
@@ -533,6 +536,15 @@ cd docs/papers && latexmk -pdf payments-bench-overview.tex
 
 ## 21. Getting the site
 
-A generated static one-pager served from `docs/` by GitHub Pages is planned as slices C5 and C6 in
-[`plans/stream-c-docs.md`](plans/stream-c-docs.md). It does not exist yet; this section will say
-where it is once it has merged.
+The site is a single generated page, `docs/index.html`, built by `scripts/site-build.mjs` from
+`docs/site/source.html`, `docs/site/style.css` and `docs/site/status.json`, plus facts read from the
+register, the scenarios, the ADRs and the findings. It loads no external resource and opens from
+`file://`. Regenerate it with `npm run site:build`; `npm run site:check` fails CI when the committed
+page is stale (ADR 0005, ADR 0006).
+
+It is published by `.github/workflows/deploy-pages.yml`, which uploads `docs/` to Pages on a
+push to `main` that touches `docs/`, and on demand. It needs one step by hand that no API can
+perform: **Settings > Pages > Build and deployment > Source = GitHub Actions**. Until that is set,
+the workflow fails (`configure-pages` with "Get Pages site failed", then the deploy job with a
+"Pages not enabled" error). [`DEPLOYMENT-DOCS.md`](DEPLOYMENT-DOCS.md)
+has the detail.
