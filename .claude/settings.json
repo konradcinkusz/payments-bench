@@ -1,0 +1,15 @@
+{
+  "extraKnownMarketplaces": {
+    "architecture-standards": {
+      "source": { "source": "github", "repo": "konradcinkusz/architecture-standards" }
+    }
+  },
+  "enabledPlugins": {
+    "architecture-core@architecture-standards": true,
+    "ticket-delivery@architecture-standards": true,
+    "research-standards@architecture-standards": true,
+    "quality-and-process@architecture-standards": true,
+    "deployment-and-platform@architecture-standards": true,
+    "services-and-clients@architecture-standards": true
+  }
+}
