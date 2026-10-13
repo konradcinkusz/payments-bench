@@ -23,7 +23,8 @@ public sealed record ReconciliationReport(DateOnly Date, int Matched, IReadOnlyL
 }
 
 /// <summary>
-/// Matches one day's statement against the payments we believe settled that day, by end-to-end
+/// Matches one day's statement against the payments that settled that day (including any returned
+/// since, whose settlement debit stays on that day's statement), by end-to-end
 /// id and amount. Breaks are the output, not an alert: each one is an item for someone to work.
 /// </summary>
 public sealed class ReconciliationService(IPaymentRepository payments, IStatementSource statements)
@@ -31,7 +32,11 @@ public sealed class ReconciliationService(IPaymentRepository payments, IStatemen
     public async Task<ReconciliationReport> ReconcileAsync(DateOnly date, CancellationToken cancellationToken)
     {
         var statement = await statements.GetAsync(date, cancellationToken);
+
+        // "Settled on this value date" is a fact about the day, not about the payment's current
+        // status: a payment returned later still sits on the settlement day's statement (F-4).
         var settled = (await payments.ListByStatusAsync(PaymentStatus.Settled, cancellationToken))
+            .Concat(await payments.ListByStatusAsync(PaymentStatus.Returned, cancellationToken))
             .Where(p => p.ValueDate == date)
             .ToDictionary(p => p.EndToEndId);
 
