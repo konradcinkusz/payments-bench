@@ -42,7 +42,7 @@ before every merge, never revert their lines); `package.json` for documentation 
 | C4 | PDF track: `docs/papers/house-preamble.tex`, `docs/papers/payments-bench-overview.tex`, `scripts/check-papers.mjs` in the lint job, `.github/workflows/build-overview-pdf.yml` (dispatch, PRs on `docs/papers/**` or `docs/diagrams/**` as artifact, `v*` tags as release asset); compiled locally before merge | `claude/stream-c/pdf` | lead | C2, C3 | #15 (merged) |
 | C5 | Site: `scripts/site-build.mjs` (Node stdlib only, `--check`), `docs/site/source.html`, `docs/site/status.json`, generated `docs/index.html` with hand-drawn inline SVG, `site:check` in the lint job | `claude/stream-c/site` | sub-session | C1 | #12 (merged) |
 | C6 | Publishing and front door: `.github/workflows/deploy-pages.yml`, `docs/DEPLOYMENT-DOCS.md` (the one manual Pages step), `README.md` restructured on agent-eval-bench's headings, ADRs for this stream's decisions at the next free numbers | `claude/stream-c/publish` | sub-session | C3, C4, C5 | #16 (merged) |
-| C7 | Final consistency pass after A and B report done: numbers in OVERVIEW, README, site and PDF equal what `main` measures; register closed rows match; PDF and site rebuilt | `claude/stream-c/final` | lead | A, B, C1-C6 | |
+| C7 | Final consistency pass after A and B report done: numbers in OVERVIEW, README, site and PDF equal what `main` measures; register closed rows match; PDF and site rebuilt | `claude/stream-c/final` | lead | A, B, C1-C6 | #35 |
 
 C2, C3 and C5 run in parallel once C1 has merged. The overview and its LaTeX edition carry the
 argument and are written by the lead, not delegated.
@@ -68,11 +68,10 @@ the evidence, and stream C will write it up.
 - F-2: the resilience pipeline's `TimeoutRejectedException` escaped the gateway's catch and
   turned a timeout-after-accept into a 500 instead of an Unknown outcome; committed-before-call
   still let the resolver recover without a duplicate. Found by the HTTP walk-through.
-- F-3, F-4, F-5 (open, found while writing `docs/OVERVIEW.md`; the fixes are in the core, so they
-  are offered to stream A): the resolver returns `SafeToResubmit` after a resubmit whose outcome is
-  unknown; a payment settled and later returned is an `OnStatementOnly` break for its settlement
-  day; the partner client's retry predicate never matches an exception, so a `GET` that times out
-  is not retried. Evidence for each is in `docs/FINDINGS.md`.
+- F-3, F-4, F-5 (found while writing `docs/OVERVIEW.md`, fixed by stream A in #21 and #23): the
+  resolver returned `SafeToResubmit` after a resubmit whose outcome was unknown; a payment settled and later returned was an `OnStatementOnly` break for its settlement
+  day; the partner client's retry predicate never matched an exception. Evidence for each, and the
+  thirteen findings streams A and B recorded, are in `docs/FINDINGS.md` (F-1 to F-18).
 
 ## Done means
 

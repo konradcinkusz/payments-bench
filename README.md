@@ -42,17 +42,18 @@ Each figure names the file it was measured in; the measurements were taken on `m
 
 | | | |
 |---|---|---|
-| **The tests** | 110 · 30 + 42 + 26 + 12 | `dotnet test`: 30 in `tests/PaymentsBench.Domain.Tests`, 42 in `tests/PaymentsBench.Application.Tests` (in-memory stores), 26 in `tests/PaymentsBench.Integration.Tests` (real PostgreSQL), 12 in `tests/PaymentsBench.Api.Tests` (in-memory stores, no database). |
-| **The scenarios** | 7 files · 4 classes | [`scenarios/`](scenarios/) holds seven scenario files in the classes `happy`, `partner-failure`, `duplicate` and `reconciliation`. They are a specification; none is executed yet (R3). |
-| **The register** | 10 open rows | [`docs/REGISTER.md`](docs/REGISTER.md): R1 to R10, none closed. |
-| **The findings** | 5 | [`docs/FINDINGS.md`](docs/FINDINGS.md): F-1 and F-2 fixed, F-3 to F-5 open. |
+| **The tests** | 365 in 7 projects | `dotnet test` against PostgreSQL at `579e135`: 30 in `tests/PaymentsBench.Domain.Tests`, 104 in `tests/PaymentsBench.Application.Tests`, 89 in `tests/PaymentsBench.Api.Tests`, 62 in `tests/PaymentsBench.Iso20022.Tests`, 41 in `tests/PaymentsBench.Integration.Tests` (real PostgreSQL), 27 in `tests/PaymentsBench.Scenarios`, 12 in `tests/PaymentsBench.ServiceDefaults.Tests`; plus the Playwright suite in `tests/PaymentsBench.E2E`. |
+| **The scenarios** | 10 files · 4 classes | [`scenarios/`](scenarios/) holds ten scenario files in the classes `happy`, `partner-failure`, `duplicate` and `reconciliation`; `tests/PaymentsBench.Scenarios` runs every one end to end in CI, in memory and on PostgreSQL (R3 closed). |
+| **The register** | 18 open · 9 closed | [`docs/REGISTER.md`](docs/REGISTER.md): open R1, R5, R10 to R15, R17 to R26; closed R2, R3, R4, R6, R7, R8, R9, R16, R27, each with its proof. |
+| **The findings** | 18 · 13 fixed | [`docs/FINDINGS.md`](docs/FINDINGS.md): F-1 to F-13 fixed, F-14 to F-18 open; none caught by a unit test failing on its own. |
+| **The decisions** | 16 | [`docs/adr/`](docs/adr/): ADR 0001 to 0016. |
 | **The load run** | 1210 requests/s, 0 duplicates | `k6/payments.js` with the simulator cycling five fault profiles, in memory, on one 4-CPU machine; per-profile numbers and what they do not prove are in [`docs/REGISTER.md`](docs/REGISTER.md) (R9, R15, R16). |
 | **The schemes** | 3 | [`scenarios/schemes.yaml`](scenarios/schemes.yaml): `sepa`, `faster-payments`, `swift`. |
 
 ## Run it
 
 ```bash
-dotnet test                                   # 318 tests; the 41 integration tests need PostgreSQL (see below)
+dotnet test                                   # 365 tests; the 41 integration tests need PostgreSQL (see below)
 dotnet test tests/PaymentsBench.Scenarios     # every scenarios/*.yaml end to end, in process; PostgreSQL too when the variable below is set
 dotnet run --project src/PaymentsBench.AppHost   # Aspire: PostgreSQL + simulator + API + dashboard
 ```
@@ -112,7 +113,7 @@ curl localhost:5100/payments/<id>/ledger
 | **To be pointed at the right document** | [`docs/START-HERE.md`](docs/START-HERE.md): which of the four kinds of document you need, and where it is. |
 | **The whole repository in words, one linear read** | [`docs/OVERVIEW.md`](docs/OVERVIEW.md): the source of truth for the argument, the mechanisms, the register and the honest readiness assessment. |
 | **Diagrams that render on GitHub** | [`docs/DIAGRAMS.md`](docs/DIAGRAMS.md): six Mermaid diagrams (money path, state machine, submit and resolve, outbox and inbox, reconciliation, delivery topology), each also a file in [`docs/diagrams/`](docs/diagrams/). |
-| **What building it caught** | [`docs/FINDINGS.md`](docs/FINDINGS.md): five findings with evidence, unflattering on purpose. |
+| **What building it caught** | [`docs/FINDINGS.md`](docs/FINDINGS.md): eighteen findings with evidence, unflattering on purpose. |
 | **The shape and the seven rules** | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). |
 | **What is not proved** | [`docs/REGISTER.md`](docs/REGISTER.md): dated rows with closing conditions. |
 | **Decisions already taken** | [`docs/adr/`](docs/adr/): one record each. |
@@ -122,20 +123,26 @@ curl localhost:5100/payments/<id>/ledger
 
 ## What is built, and what has never run
 
-Built, tested and on `main`: the domain, the application handlers, the in-memory and EF Core
-stores, the HTTP surface, the partner simulator with switchable faults, and the 110 tests above.
+Built, tested and on `main`: the domain, the application handlers and the background sweep, the
+in-memory and EF Core/PostgreSQL stores with migrations, the HTTP surface with validation,
+problem details and bearer-token identity, the ISO 20022 edge, the simulated partner with
+switchable faults, the scenario runner, container images, and the 365 tests above.
 
-Never run, recorded in [`docs/REGISTER.md`](docs/REGISTER.md) rather than in a footnote:
+Never run, or not proved, recorded in [`docs/REGISTER.md`](docs/REGISTER.md) rather than in a
+footnote:
 
 - **No real bank.** The partner is `PaymentsBench.PartnerSimulator`; its API shape is invented
-  (R1). No ISO 20022 message is parsed or produced (R2).
-- **The scenarios do not run.** `ScenarioFilesTests` checks the seven files parse; no runner
-  executes them against the API and the simulator (R3).
-- **PostgreSQL has not run in CI** (R4), the outbox publishes to a log line (R5), concurrency
-  is a column and not a test (R6), the calendar is weekends only (R7), nothing resolves a
-  `Submitted` payment on its own (R8), the first load run is in memory only and found a defect in `resolve` (R15, R16), and there is no
-  sanctions, AML or limits control (R10).
-- **Three open defects**, F-3 to F-5 in [`docs/FINDINGS.md`](docs/FINDINGS.md).
+  (R1). The ISO 20022 samples are hand-written, not a bank's, and not schema-validated (R20).
+- **Never deployed.** The Fly.io topology and `deploy.yml` exist; no tag has deployed (R14), and
+  the deployment's security settings are unverified (R26).
+- **No payment owner.** Any token holder can read and submit any payment (R21); also R22 to R25
+  from the [security review](docs/security/SECURITY-REVIEW.md). Deploy single-operator only until
+  R21 closes.
+- **No broker** has carried an event (R5); the partner webhook is not partner-signed (R13); the
+  load numbers are in memory, one instance, anonymous (R15); the sweep's alert is prose (R17); the
+  value date is not stamped at submission (R11); a return day does not reconcile (R18); no
+  sanctions, AML or limits (R10).
+- **Five open findings**, F-14 to F-18 in [`docs/FINDINGS.md`](docs/FINDINGS.md).
 
 ### How it was built
 
@@ -166,7 +173,7 @@ docs/                               architecture, the register, decision records
   site/                             its source, stylesheet and facts file
   papers/                           LaTeX edition of OVERVIEW.md, built to PDF on demand
   adr/                              decision records
-  plans/                            the three streams of planned work
+  plans/                            the three streams of work, each slice with its pull request
 scripts/                            documentation tooling (link check, diagram render and check, LaTeX source check, site generator)
 package.json                        documentation tooling only: markdownlint, link check, diagram check, papers check and the site generator, nothing .NET depends on it
 .github/workflows/                  CI, the PDF build, the Pages deploy

@@ -29,13 +29,14 @@ something or learning something, and do you need steps or understanding?
 
 ### How-to: "I know what I want to do"
 
-- **Run the tests**: `dotnet test` from the repository root (in-memory stores, no database).
+- **Run the tests**: `dotnet test` from the repository root; the integration tests need PostgreSQL
+  (`PAYMENTSBENCH_TEST_POSTGRES`, or Docker), as the README's "Run it" explains.
 - **Run the whole system** with PostgreSQL and the dashboard: `dotnet run --project src/PaymentsBench.AppHost`.
 - **Change a scheme's cut-off or settlement days**: edit [`scenarios/schemes.yaml`](../scenarios/schemes.yaml);
   scheme rules are data, never branches in code.
 - **Add a fault scenario**: add a file under [`scenarios/`](../scenarios/), following
-  [`scenarios/README.md`](../scenarios/README.md). Today the files are checked for shape, not
-  executed (register row R3).
+  [`scenarios/README.md`](../scenarios/README.md). `tests/PaymentsBench.Scenarios` picks it up with
+  no code change and runs it end to end (`dotnet test tests/PaymentsBench.Scenarios`).
 - **Make the simulated partner misbehave**: `PUT /faults` on the simulator with one of `Latency`,
   `TimeoutAfterAccept`, `ServerError`, `RejectAll`, `StatementDrift` (`src/PaymentsBench.PartnerSimulator/Program.cs`).
 
@@ -51,6 +52,10 @@ something or learning something, and do you need steps or understanding?
 ### Reference: "I need the exact facts"
 
 - [**REGISTER.md**](REGISTER.md): what is not proved, with dates and closing conditions.
+- [**security/SECURITY-REVIEW.md**](security/SECURITY-REVIEW.md): the security review, its
+  findings and what blocks a deployment.
+- [**DEPLOYMENT.md**](DEPLOYMENT.md): the Fly.io topology for the service, never yet deployed;
+  [**DEPLOYMENT-DOCS.md**](DEPLOYMENT-DOCS.md): how these documents are published.
 - [**DIAGRAMS.md**](DIAGRAMS.md): six Mermaid diagrams (money path, state machine, submit and resolve,
   outbox and inbox, reconciliation, delivery topology), each beside the code it reflects.
 - [**adr/**](adr/): decisions already taken, one record each.

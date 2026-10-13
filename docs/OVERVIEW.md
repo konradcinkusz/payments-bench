@@ -5,14 +5,16 @@ exactly once and to recover when the bank on the other end misbehaves. The bank 
 mechanisms are real code with tests. The service is the specimen; the evidence about it is the
 deliverable.**
 
-- **Status**: the core service, its tests and the partner simulator are on `main`; three streams
-  of follow-up work are planned in [`plans/`](plans/) (core and correctness, platform,
-  documentation). This document describes what has merged, not what is planned.
+- **Status**: all three streams of work in [`plans/`](plans/) (core and correctness, platform,
+  documentation) have merged; this document describes `main` at `579e135` plus this pass, measured
+  on 2026-10-13. It describes what has merged, never what is planned.
 - **Companion documents**: [`START-HERE.md`](START-HERE.md) (which document to read) ·
   [`ARCHITECTURE.md`](ARCHITECTURE.md) (the shape and the seven rules) ·
   [`REGISTER.md`](REGISTER.md) (what is not proved) · [`FINDINGS.md`](FINDINGS.md) (what building
   it caught) · [`adr/`](adr/) (decisions) · [`../scenarios/`](../scenarios/) (the fault scenarios as
-  data).
+  data) · [`DIAGRAMS.md`](DIAGRAMS.md) · [`security/SECURITY-REVIEW.md`](security/SECURITY-REVIEW.md) ·
+  [`DEPLOYMENT.md`](DEPLOYMENT.md) (the service) · [`DEPLOYMENT-DOCS.md`](DEPLOYMENT-DOCS.md) (these
+  documents).
 - **What this document is for**: every file above answers one question in depth. This one answers
   "what is this, why is it built this way, and does it work" in one sitting, for a reader who will
   not open ten files to find out. It introduces no fact the repository does not already contain;
@@ -58,32 +60,34 @@ cases on purpose and writes down, in a register, which of them it has proved and
 
 What is on `main`:
 
-- an HTTP API (`src/PaymentsBench.Api/Program.cs`) to initiate, submit, resolve and inspect an
-  outbound transfer, receive partner notifications, run reconciliation and read ledger balances;
+- an HTTP API (`src/PaymentsBench.Api`) to initiate (JSON or an ISO 20022 `pain.001` file),
+  list, submit, resolve and inspect an outbound transfer, receive partner notifications, run
+  reconciliation and read ledger balances, behind bearer-token authentication;
 - a six-state payment machine whose allowed moves are one table
   (`src/PaymentsBench.Domain/Payments/PaymentTransitions.cs`);
-- idempotent initiation: an `Idempotency-Key` plus a SHA-256 hash of the request body, so a replay
-  returns the original payment and a reused key with a different body is a `409`;
+- idempotent initiation: an `Idempotency-Key` plus a SHA-256 hash of the request body, and
+  optimistic concurrency that makes one of two racing writers lose cleanly;
 - a submit that commits `Submitted` before calling the partner, and maps every failure after the
   request may have left the process to an **Unknown** outcome that is never retried blind;
 - a resolver that asks the partner by end-to-end id and resubmits only when the partner says it has
-  no record;
-- a transactional outbox for events and an inbox that deduplicates partner notifications;
+  no record, and a background sweep that runs the resolver on its own;
+- a transactional outbox with an at-least-once contract and a deduplicating consumer, and an inbox
+  that deduplicates partner notifications;
 - a double-entry, append-only ledger with three accounts, `customer-funds`, `pending-outbound` and
   `nostro` (`src/PaymentsBench.Domain/Ledger/LedgerAccounts.cs`);
-- reconciliation of a day's statement against settled payments, returning named breaks as a work
-  queue;
-- scheme rules (cut-off, currency, settlement days) as data in `scenarios/schemes.yaml`;
-- a **simulated** partner bank (`src/PaymentsBench.PartnerSimulator`) with five fault profiles
-  switched at runtime;
-- a degraded mode: with no database connection string every store is in memory and the log says so.
+- reconciliation of a day's statement (JSON or `camt.053`) against settled payments, returning
+  named breaks as a work queue;
+- scheme rules and dated holiday calendars as data under `scenarios/`;
+- a **simulated** partner bank (`src/PaymentsBench.PartnerSimulator`) with five fault profiles,
+  and ten scenario files that run end to end against the API and the simulator in CI;
+- PostgreSQL through EF Core migrations, a degraded in-memory mode, container images, a Fly.io
+  topology that has never been deployed, a k6 load run, and a security review.
 
-37 tests pass on `main` (15 in `tests/PaymentsBench.Domain.Tests`, 22 in
-`tests/PaymentsBench.Application.Tests`, counted by `dotnet test` on 2026-10-13). They run against
-in-memory stores and a scripted partner, which is exactly why the two most serious defects found so
-far were found by walking a transfer through the running services over HTTP instead
-([`FINDINGS.md`](FINDINGS.md), F-1 and F-2). Ten rows in [`REGISTER.md`](REGISTER.md) say what has
-not been proved, the first of which is that nothing here has ever talked to a real bank.
+365 tests pass on `main` (`dotnet test` against PostgreSQL on 2026-10-13 at `579e135`; per project
+in §13). Eighteen defects are recorded in [`FINDINGS.md`](FINDINGS.md), thirteen of them fixed, and
+none was caught by a unit test failing on its own. Nine register rows are closed with proof and
+eighteen are open ([`REGISTER.md`](REGISTER.md)); the first open row is still that nothing here has
+ever talked to a real bank.
 
 ## 2. Why a payment rail is hard
 
@@ -153,34 +157,38 @@ Four projects carry the logic, in strict dependency order (`docs/ARCHITECTURE.md
 
 | Project | Knows | Holds |
 |---|---|---|
-| `PaymentsBench.Domain` | nothing | `Money`, `Payment` and `PaymentTransitions`, `JournalEntry` and `Postings`, `SchemeRules` and `ValueDateCalculator` |
-| `PaymentsBench.Application` | the domain and its ports | the handlers (initiate, submit, resolve, apply notification), `ReconciliationService`, the ports (`IPaymentRepository`, `ILedger`, `IOutbox`, `IInbox`, `IUnitOfWork`, `IPartnerGateway`, `IStatementSource`, `IClock`) |
-| `PaymentsBench.Infrastructure` | the ports | in-memory and EF Core/PostgreSQL stores, `OutboxDispatcher`, `HttpPartnerGateway`, `HttpStatementSource` |
-| `PaymentsBench.Api` | all of the above | the HTTP surface; `Program.cs` is the manifest |
+| `PaymentsBench.Domain` | nothing | `Money`, `Payment` and `PaymentTransitions`, `JournalEntry` and `Postings`, `SchemeRules`, `HolidayCalendar` and `ValueDateCalculator` |
+| `PaymentsBench.Application` | the domain and its ports | the handlers (initiate, submit, resolve, apply notification, sweep), `ReconciliationService`, the ports (`IPaymentRepository`, `ILedger`, `IOutbox`, `IInbox`, `IUnitOfWork`, `IPartnerGateway`, `IStatementSource`, `ISchemeCatalog`, `IClock`) |
+| `PaymentsBench.Infrastructure` | the ports | in-memory and EF Core/PostgreSQL stores, migrations and `MigrationGate`, the outbox dispatcher and publishers, `SubmittedPaymentSweeper`, `HttpPartnerGateway` and `PartnerResilience`, `HttpStatementSource`, the scheme catalog loader |
+| `PaymentsBench.Api` | all of the above | the HTTP surface, validation and problem details, identity and grants; `Program.cs` is the manifest |
 
-Around them: `PaymentsBench.ServiceDefaults` (OpenTelemetry, health, service discovery; by rule no
-domain type), `PaymentsBench.AppHost` (the Aspire composition root: one PostgreSQL with a
-`payments` database, the partner simulator, the API that references both) and
-`PaymentsBench.PartnerSimulator` (the simulated bank).
+Around them: `PaymentsBench.Iso20022` (the `pain.001` and `camt.053` edge, referencing Application
+only; ADR 0014), `PaymentsBench.ServiceDefaults` (OpenTelemetry, health, an opt-in Prometheus
+endpoint, the request-size cap; by rule no domain type), `PaymentsBench.AppHost` (the Aspire
+composition root: one PostgreSQL with a `payments` database, the partner simulator, the API, and
+authservice when a signing key is configured) and `PaymentsBench.PartnerSimulator` (the simulated
+bank).
 
-**Storage modes.** `InfrastructureRegistration.AddPaymentsInfrastructure`
-(`src/PaymentsBench.Infrastructure/InfrastructureRegistration.cs`) picks the stores once, at start-up.
-With a connection string named `payments`, every store is EF Core on PostgreSQL, the outbox has a
-dispatcher, and the schema is applied by a hosted service. Without one, every store is in memory,
-the unit of work is a no-op, and the log says, at warning level, that the service is running
-degraded and nothing survives a restart. A missing database degrades the service instead of
-stopping it; the tests use this mode.
+**Storage modes.** `InfrastructureRegistration.AddPaymentsInfrastructure` picks the stores once, at
+start-up. With a connection string named `payments`, every store is EF Core on PostgreSQL, the
+schema is the `InitialSchema` migration applied by `MigrationHostedService` after the server starts,
+and every background service waits on `MigrationGate`; `/health` is unhealthy until the migration
+finishes (ADR 0008). Without a connection string every store is in memory and the log says, at
+warning level, that the service is running degraded and nothing survives a restart. The in-memory
+repository follows the same concurrency rule as PostgreSQL (ADR 0013), so the degraded mode behaves
+the same way under a race; it has no outbox dispatcher.
 
-**Persistence.** `PaymentsDbContext` stores rows, not aggregates; the repository rebuilds a
-`Payment` by replaying the moves its stored status implies, so the domain's invariants hold on the
-way out of the database as well as on the way in. `Version` is a concurrency token
-(`src/PaymentsBench.Infrastructure/Persistence/PaymentsDbContext.cs`). No test races two writers yet
-(register R6).
+**Identity.** The API holds no signing key. It validates RS256 bearer tokens against authservice's
+JWKS (`Auth:Authority`, `Auth:Issuer`, `Auth:Audience`; ADR 0015). Every endpoint needs a token
+except `/health` and `/alive`; the partner webhook needs the `payments.partner.notify` grant, and the
+ledger and reconciliation endpoints need `payments.operate` (ADR 0016). Without `Auth:Authority` the
+API allows anonymous calls in Development only, never on Fly, and refuses to start anywhere else.
 
-**Observability.** One OpenTelemetry trace per request via `ServiceDefaults`; a
-`payments.transitions` counter on the `PaymentsBench` meter, tagged by status
-(`src/PaymentsBench.Api/Program.cs`); `/health` and `/alive`; OTLP export when
-`OTEL_EXPORTER_OTLP_ENDPOINT` is set. The Aspire dashboard shows all of it with no configuration.
+**Observability.** One OpenTelemetry trace per request with health probes filtered out; the
+`PaymentsBench` meter carries `payments.transitions` (tagged by status),
+`payments.submitted.oldest_age_seconds` and `payments.sweep.resolved` (tagged by outcome); OTLP
+export when `OTEL_EXPORTER_OTLP_ENDPOINT` is set; `/metrics` when `Metrics:Prometheus:Enabled` is
+true; a provisioned Grafana dashboard under `docs/ops/grafana/`.
 
 ## 5. The seven rules
 
@@ -190,12 +198,12 @@ with where it is enforced.
 | # | Rule | Enforced in |
 |---|---|---|
 | 1 | Submitted is committed before the partner call. | `SubmitPaymentHandler.HandleAsync`: `MarkSubmitted`, update, outbox, commit, then `partner.SubmitAsync` |
-| 2 | An unknown outcome is never retried. | `HttpPartnerGateway.SubmitAsync` maps failures to `SubmitOutcome.Unknown`; the resilience pipeline retries `GET` only (`InfrastructureRegistration.cs`) |
+| 2 | An unknown outcome is never retried. | `HttpPartnerGateway.SubmitAsync` maps failures to `SubmitOutcome.Unknown`; `PartnerResilience.ShouldRetry` never retries a `POST` |
 | 3 | Resubmission needs the partner's word. | `ResolveSubmittedPaymentHandler`: only `PartnerStatus.NotFound` leads to a second submit, with the same end-to-end id |
 | 4 | The ledger is append-only and balanced. | `JournalEntry` cannot be constructed unbalanced per currency; balances are sums |
 | 5 | Events go through the outbox, notifications through the inbox. | `IOutbox.EnqueueAsync` in every handler's unit of work; `IInbox.TryRecordAsync` first in `ApplyPartnerNotificationHandler` |
 | 6 | Reconciliation produces breaks, not alerts. | `ReconciliationService` returns a `ReconciliationReport` with named `BreakKind`s |
-| 7 | Scheme rules are data. | `scenarios/schemes.yaml`, read into `SchemeRules` |
+| 7 | Scheme rules are data. | `scenarios/schemes.yaml` and `scenarios/calendars/*.yaml`, loaded into `ISchemeCatalog` at start-up |
 
 Rules 1 to 3 are one argument and the core of the repository: if the state before the call is
 durable, and an unknowable result is never guessed at, and the only thing allowed to trigger a
@@ -206,23 +214,27 @@ rule 1 alone was enough for the resolver to recover without a duplicate.
 
 ## 6. Idempotency
 
-`POST /payments` requires an `Idempotency-Key` header; without it the API answers `400`
-(`src/PaymentsBench.Api/Program.cs`). `InitiatePaymentHandler`
-(`src/PaymentsBench.Application/Payments/InitiatePayment.cs`) computes `RequestHash.Of(command)`, a
-SHA-256 over a canonical string of the fields that make two requests "the same request": end-to-end
-id, amount formatted to two decimals in the invariant culture, currency upper-cased, debtor and
-creditor accounts, and scheme (`RequestHash.cs`). Then:
+`POST /payments` requires an `Idempotency-Key` header; without it the API answers a `400` problem
+(ADR 0009). `InitiatePaymentHandler` (`src/PaymentsBench.Application/Payments/InitiatePayment.cs`)
+computes `RequestHash.Of(command)`, a SHA-256 over a canonical string of the fields that make two
+requests "the same request": end-to-end id, amount formatted to two decimals in the invariant
+culture, currency upper-cased, debtor and creditor accounts, and scheme. Then:
 
 - no payment with that key: create one, reserve the funds in the ledger and enqueue
   `PaymentInitiated`, all in one unit of work;
 - a payment with that key and the same hash: return the original payment;
-- a payment with that key and a different hash: `IdempotencyConflictException`, which the API maps
-  to `409`.
+- a payment with that key and a different hash: `IdempotencyConflictException`, a `409`.
 
-Three tests in `tests/PaymentsBench.Application.Tests/IdempotencyTests.cs` pin this: the same
-request twice is one payment and one reservation; the same key with a different body is a conflict;
-different keys are different payments. What is not yet tested is two identical requests racing each
-other into the database at once; that is a concurrency question and sits with register row R6.
+`POST /payments/pain001` reads an ISO 20022 `pain.001.001.09` file into one `InitiatePayment` per
+transaction, with the key `MsgId/PmtInfId/EndToEndId`, so posting the same file twice replays
+instead of duplicating (ADR 0014).
+
+Two identical requests racing each other are the case a sequential check cannot see. The unique
+index on the key rejects the second insert, and the loser gets a `409`, not the winner's `201` body
+(ADR 0013). That is register row R19. The key is also global, not per caller: one caller can replay
+another's key and learn that the payment exists (R21, security finding SEC-05). Tests:
+`tests/PaymentsBench.Application.Tests/IdempotencyTests.cs`, `ConcurrencyTests` in
+`tests/PaymentsBench.Integration.Tests`, and `Pain001EndpointTests`.
 
 ## 7. The unknown outcome and the resolver
 
@@ -236,64 +248,71 @@ the payment to `Submitted`, enqueues `PaymentSubmitted` and commits, and only th
 partner. `HttpPartnerGateway.SubmitAsync` turns the answer into one of three outcomes:
 
 - `422` from the partner → `Rejected`, with the partner's reason code; the funds are released;
-- any other non-success status, an empty body, or an `HttpRequestException`,
-  `TaskCanceledException`, `TimeoutRejectedException` or `BrokenCircuitException` → `Unknown`;
+- any other non-success status, an empty body, or a transport error, timeout or open circuit →
+  `Unknown`;
 - a success with a partner reference → `Accepted`.
 
 On `Unknown` the handler does nothing at all: the payment stays at `Submitted`, which is the state
-that means "ask before you act". The HTTP client's resilience handler is configured to retry only
-`GET` requests (`InfrastructureRegistration.cs`), so the submit `POST` is sent once. The predicate is
-stricter than intended: it retries a `GET` on a 5xx response but never on an exception, so a status
-lookup that times out is not retried either ([`FINDINGS.md`](FINDINGS.md), F-5).
+that means "ask before you act". `PartnerResilience.ShouldRetry`
+(`src/PaymentsBench.Infrastructure/Partner/PartnerResilience.cs`) never retries a `POST`, so the
+submit is sent once. It retries a `GET` that threw a transport error, timed out per attempt or
+answered 5xx, and never one that hit an open circuit or ran out of its total budget. That rule took
+two findings to reach: F-5 (a lookup that threw was never retried) and F-9 (the fix then retried an
+open circuit and slowed every recovery during an outage).
 
-**Resolve.** `POST /payments/{id}/resolve` runs `ResolveSubmittedPaymentHandler`
-(`ResolveSubmittedPayment.cs`). If the payment is not at `Submitted` it returns `AlreadyResolved`.
-Otherwise it asks the partner for the transfer by end-to-end id and applies the answer:
+**Resolve.** `POST /payments/{id}/resolve` runs `ResolveSubmittedPaymentHandler`. If the payment is
+not at `Submitted` it returns `AlreadyResolved`. Otherwise it asks the partner for the transfer by
+end-to-end id:
 
-| Partner says | Resolver does |
-|---|---|
-| `NotFound` | resubmits once with the same end-to-end id, and applies an accepted or rejected answer |
-| `Accepted` | moves the payment to `Accepted` |
-| `Settled` | moves it to `Settled` and posts `Settle` |
-| `Rejected` | moves it to `Rejected` and posts `Release` |
-| `Returned` | refuses: a return for a transfer never accepted on this side is an error |
+| Partner says | Resolver does | Outcome |
+|---|---|---|
+| `NotFound` | resubmits once with the same end-to-end id; applies an accepted or rejected answer | `Accepted`, `Rejected`, or `StillUnknown` if the resubmit's own outcome is unknown |
+| `Accepted` | moves the payment to `Accepted` | `Accepted` |
+| `Settled` | moves it to `Settled` and posts `Settle` | `Settled` |
+| `Rejected` | moves it to `Rejected` and posts `Release` | `Rejected` |
+| `Unavailable` (open circuit, timeout, transport failure, 5xx) | writes nothing; the payment stays `Submitted` | `PartnerUnavailable` |
+| `Returned` | refuses: a return for a transfer never accepted on this side is an error | |
+
+`Unavailable` is never read as `NotFound`; that distinction is what keeps an outage from becoming a
+resubmit. Before it existed the resolver answered 500 during an outage (F-7). `StillUnknown`
+replaced a `SafeToResubmit` answer that said the opposite of the truth (F-3).
 
 The resubmit carries the same end-to-end id so that, if the first attempt arrives late, the partner
-can recognise it as a duplicate. That is an assumption about the partner, stated in ADR 0001's
-consequences; the simulated partner honours it (`transfers.GetOrAdd(request.EndToEndId, ...)` in
-`src/PaymentsBench.PartnerSimulator/Program.cs`), and a real partner that did not would force a
-different design.
+can recognise it as a duplicate. That is an assumption about the partner, stated in ADR 0001; the
+simulated partner honours it, and a real partner that did not would force a different design.
 
-Five tests in `tests/PaymentsBench.Application.Tests/SubmitAndResolveTests.cs` cover accepted,
-rejected, timeout-never-resubmitted-blind, resubmit-only-on-not-found, and resolving a payment that
-is not submitted. One branch is not covered and is named badly: when the resubmit's own outcome is
-unknown, the resolver returns `SafeToResubmit` ([`FINDINGS.md`](FINDINGS.md), F-3). Nothing calls
-the resolver on its own yet; it is an endpoint, not a schedule (register R8).
+**The sweep.** `SubmittedPaymentSweeper`, a background service behind `MigrationGate`, runs
+`SweepSubmittedPaymentsHandler` every `Sweeper:Interval` (30 s by default): Submitted payments older
+than `Sweeper:MinimumAge` (60 s), oldest first, at most `Sweeper:BatchSize` (50), each resolved
+through the same handler in its own scope (ADR 0011). The sweep never calls the partner itself, so
+ADR 0001 holds by construction. ADR 0011 documents the alert, `payments.submitted.oldest_age_seconds`
+above 360 s for 5 minutes with the defaults; no alert rule is deployed, and the sweep has not run on
+the EF stores with two instances (R17).
 
 ## 8. Outbox and inbox
 
 **Outbox.** Every handler enqueues the payment's domain events (`PaymentInitiated`,
-`PaymentSubmitted`, `PaymentAccepted`, `PaymentSettled`, `PaymentRejected`, `PaymentReturned`, in
-`src/PaymentsBench.Domain/Payments/PaymentEvents.cs`) through `IOutbox` in the same unit of work as
-the state change and the ledger entry. With PostgreSQL, `OutboxDispatcher`
-(`src/PaymentsBench.Infrastructure/Outbox/OutboxDispatcher.cs`) polls every two seconds, takes up to
-100 undispatched messages oldest first, hands each to `IEventPublisher`, and marks it dispatched
-only after the publish returned. A crash between the publish and the mark publishes the message
-again: delivery is at least once by design, and consumers must deduplicate on the message id.
+`PaymentSubmitted`, `PaymentAccepted`, `PaymentSettled`, `PaymentRejected`, `PaymentReturned`) through
+`IOutbox` in the same unit of work as the state change and the ledger entry. With PostgreSQL,
+`OutboxDispatcher` waits on `MigrationGate` and then runs `OutboxBatchDispatcher` on a timer: it
+publishes undispatched rows in `OccurredAt` order and marks a row dispatched only after its publish
+returned. A crash between the two publishes the message again, with the same id. Delivery is at
+least once by design (ADR 0010).
 
-What it publishes to today is a log line (`LoggingEventPublisher`). No broker is wired and no
-consumer exists, so at-least-once delivery to a consumer is a design claim, not a tested property:
-register row R5. In the in-memory mode there is no dispatcher at all; events accumulate in the
-in-memory outbox.
+`Outbox:Publisher` selects the publisher: `log` (the default, a log line) or `channel` (a bounded
+in-process channel with a `DedupingConsumer` that applies each message id once and counts the
+duplicates it drops). The contract is proved in process against PostgreSQL (`OutboxContractTests`,
+`DedupingConsumerTests`): an event committed with its change is delivered, a publish whose
+dispatched mark is lost is redelivered and applied once, nothing is published for a failed commit.
+**No broker has ever carried an event**: register row R5 stays open, narrowed. In the in-memory
+mode there is no dispatcher at all.
 
-**Inbox.** Partner notifications (`POST /partner/notifications`) are delivered at least once too.
-`ApplyPartnerNotificationHandler` (`ApplyPartnerNotification.cs`) records the notification id in
-`IInbox` before doing anything else; a second delivery of the same id returns `Duplicate` and
-changes nothing. A notification for an end-to-end id the service does not know is recorded and
-reported as `UnknownPayment`, not dropped, because it is exactly what reconciliation needs to see.
-Tests in `NotificationTests.cs`: a settlement notification delivered twice settles once; a return
-after settlement gives the customer their money back; a notification for an unknown payment is
-reported.
+**Inbox.** Partner notifications (`POST /partner/notifications`, which needs the
+`payments.partner.notify` grant) are delivered at least once too. `ApplyPartnerNotificationHandler`
+records the notification id in `IInbox` before anything else; a second delivery returns
+`Duplicate` and changes nothing. A notification for an unknown end-to-end id is recorded and
+reported as `UnknownPayment`, not dropped. The sender is authenticated with a bearer token and a
+grant, not a partner signature (R13).
 
 ## 9. The ledger
 
@@ -302,11 +321,12 @@ two `JournalLine`s that balance per currency; entries are appended, never update
 correction is another entry; balances are sums over lines. Direction is the side (debit or credit),
 never a negative amount.
 
-The five ledger tests (`tests/PaymentsBench.Domain.Tests/LedgerTests.cs`) prove that an unbalanced
+The ledger tests (`tests/PaymentsBench.Domain.Tests/LedgerTests.cs`, and `LedgerTests` against PostgreSQL in `tests/PaymentsBench.Integration.Tests`) prove that an unbalanced
 entry cannot exist, that balance is checked per currency, that direction is the side, that a
 rejected payment releases the reservation, and that a returned payment nets to zero on
 `customer-funds` and `nostro`. `GET /payments/{id}/ledger` returns a payment's entries;
-`GET /ledger/balances/{account}/{currency}` returns a derived balance.
+`GET /ledger/balances/{account}/{currency}` returns a derived balance; both need the
+`payments.operate` grant.
 
 `BalanceAsync` is a sum over rows. ADR 0002 records the consequence: at volume that needs a
 materialised balance maintained by the same entries, with the entries still the source of truth.
@@ -315,12 +335,13 @@ materialised balance maintained by the same entries, with the entries still the 
 
 ADR [0003](adr/0003-reconciliation-produces-a-work-queue.md): a statement that disagrees with the
 ledger is the normal case on some days, and an alert saying "reconciliation failed" tells the person
-on call nothing. `POST /reconciliation/runs/{date}` runs `ReconciliationService`
-(`src/PaymentsBench.Application/Reconciliation/ReconciliationService.cs`): it reads the day's
-statement through `IStatementSource`, takes the payments whose status is `Settled` and whose value
-date is that day, and matches debit lines to payments by end-to-end id and exact amount and
-currency. The output is a `ReconciliationReport`: the number matched, and a list of breaks, each
-with a kind, the end-to-end id, and both amounts where both exist.
+on call nothing. `POST /reconciliation/runs/{date}` (grant `payments.operate`) runs
+`ReconciliationService`: it reads the day's statement through `IStatementSource`, as JSON or, when
+`Partner:StatementFormat` is `camt053`, as an ISO 20022 `camt.053.001.08` document read at the edge
+(ADR 0014). It takes the payments that settled with that value date, whatever happened to them
+since, and matches debit lines to them by end-to-end id and exact amount and currency. The output
+is a `ReconciliationReport`: the number matched, and a list of breaks, each with a kind, the
+end-to-end id, and both amounts where both exist.
 
 | Break kind | Meaning |
 |---|---|
@@ -328,44 +349,48 @@ with a kind, the end-to-end id, and both amounts where both exist.
 | `InLedgerOnly` | a payment settled that the statement does not show |
 | `AmountMismatch` | both sides have it, with different amounts |
 
-A clean day is `IsClean == true`. Three tests in `ReconciliationTests.cs` cover a clean day, each
-kind of break named, and a settled payment missing from the statement. Matching is exact: fees,
-tolerances and multi-line bookings are not handled, and ADR 0003 says each would be a new break
-kind, not a fuzzier match.
+A clean day is `IsClean == true`. Matching is exact: fees, tolerances and multi-line bookings are
+not handled, and ADR 0003 says each would be a new break kind, not a fuzzier match.
 
-One defect is known. A payment that settled on a day and was returned later is no longer `Settled`,
-so its settlement line on that day's statement is reported as `OnStatementOnly`
-([`FINDINGS.md`](FINDINGS.md), F-4). The statement the simulated partner produces is a JSON
-reduction of what an ISO 20022 `camt.053` carries, and it has no line for the return itself
-(register R2).
+"Whatever happened since" is the F-4 fix: a payment settled on a day and returned later used to be
+reported as `OnStatementOnly` for its settlement day. The return day still cannot reconcile, because
+the simulated statement carries no credit line for the return itself (R18). The `camt.053` samples
+are hand-written in the published shape, not validated against the official schemas, and no bank
+issued them (R20).
 
 ## 11. Schemes and calendars
 
-`scenarios/schemes.yaml` holds three schemes as data:
+`scenarios/schemes.yaml` holds three schemes as data, each naming its calendar:
 
-| Scheme | Currency | Cut-off | Settlement business days |
-|---|---|---|---|
-| `sepa` | EUR | 16:00 | 1 |
-| `faster-payments` | GBP | 23:59 | 0 |
-| `swift` | USD | 15:00 | 2 |
+| Scheme | Currency | Cut-off | Settlement business days | Calendar |
+|---|---|---|---|---|
+| `sepa` | EUR | 16:00 | 1 | `target2` |
+| `faster-payments` | GBP | 23:59 | 0 | `uk-faster-payments` |
+| `swift` | USD | 15:00 | 2 | `us-fedwire` |
 
-`ValueDateCalculator.ValueDateFor` (`src/PaymentsBench.Domain/Schemes/SchemeRules.cs`) computes the
-value date: the same business day if the submission is before cut-off on a business day, else the
-next business day, then plus the scheme's settlement days. Three tests in
-`tests/PaymentsBench.Domain.Tests/ValueDateTests.cs`: before cut-off, after cut-off, weekends
-skipped.
+Calendars are dated data in `scenarios/calendars/*.yaml`: whether weekends are closed, the closing
+days as explicit dates, and the covered range, each citing its public source (ADR 0007). There is no
+Easter algorithm in code. `HolidayCalendar` answers only inside its covered range and throws
+`CalendarCoverageException` outside it: a calendar that does not know a date must not call it a
+business day. Schemes and calendars load at start-up into `ISchemeCatalog`; a missing or malformed
+file stops start-up naming the file, and an unknown scheme or a currency the scheme does not carry
+is refused at initiation with a `422`.
 
-The only business calendar is `WeekendOnlyCalendar`. There are no public holidays, no per-scheme
-calendar and no TARGET2 closing days (register R7), so a value date computed across a bank holiday
-is wrong today.
+`ValueDateCalculator.ValueDateFor` computes the value date: the same business day before cut-off,
+else the next business day, then plus the scheme's settlement days. `HolidayCalendarTests` prove that
+Christmas 2026 and Good Friday and Easter Monday 2026 move the SEPA value date. **Nothing calls the
+calculator at submit or acceptance yet**: the payment's value date is still set only when the
+partner reports settlement. The calendars are proved; the value date a customer would be shown is
+not (R11).
 
 ## 12. The partner simulator and the scenario classes
 
 **The simulator.** `src/PaymentsBench.PartnerSimulator/Program.cs` is a bank that misbehaves on
-request. It is not a model of any real scheme's API: its shape is invented (register R1). It
-accepts transfers (`POST /transfers`, deduplicated by end-to-end id), answers lookups
-(`GET /transfers/{endToEndId}`), lets a test settle or return a transfer, and serves a statement per
-date (`GET /statements/{date}`). `PUT /faults` switches the fault profile at runtime:
+request. It is not a model of any real scheme's API: its shape is invented (R1). It accepts
+transfers (`POST /transfers`, deduplicated by end-to-end id), answers lookups, lets a test settle or
+return a transfer, serves a statement per date as JSON or `camt.053`, and counts the calls it
+received (`GET /diagnostics/calls`, for the scenario runner). `PUT /faults` switches the fault
+profile at runtime:
 
 | Fault | Effect |
 |---|---|
@@ -376,105 +401,152 @@ date (`GET /statements/{date}`). `PUT /faults` switches the fault profile at run
 | `RejectAll` | returns `422` with a reason code (`AC01` by default) |
 | `StatementDrift` | adds a drift (0.01 by default) to every statement amount |
 
-**The scenarios.** `scenarios/*.yaml` describe what the rail must survive as data: the partner's
-fault, the calls made, and the state the system must end in. Seven files in four classes
-(`scenarios/README.md`):
+Because it deduplicates by end-to-end id, it cannot say how many times a transfer was submitted, so
+"no duplicate transfer" under load is checked indirectly (F-15, R15).
 
-| Class | Files | What it proves |
-|---|---|---|
-| `happy` | `happy-sepa-transfer.yaml`, `return-after-settlement.yaml` | the plain path works and the ledger nets correctly |
-| `partner-failure` | `timeout-after-accept.yaml`, `server-error-then-not-found.yaml` | a refusal, a 5xx or a timeout after acceptance leaves a recoverable state and never a duplicate |
-| `duplicate` | `duplicate-request.yaml`, `duplicate-notification.yaml` | the same request or notification twice |
-| `reconciliation` | `statement-drift.yaml` | a disagreeing statement produces named breaks |
+**The scenarios.** `scenarios/*.yaml` describe what the rail must survive as data. Ten files in
+four classes (`scenarios/README.md`):
 
-**They are a specification, not an executed suite.** `ScenarioFilesTests` checks that every file
-parses and that every class has at least one scenario; no runner drives them against the API and
-the simulator yet. That is register row R3, and it is the closing condition that would also guard
-F-1 and F-2 against regression.
+| Class | Files |
+|---|---|
+| `happy` | `happy-sepa-transfer.yaml`, `happy-across-closing-days.yaml`, `return-after-settlement.yaml` |
+| `partner-failure` | `timeout-after-accept.yaml`, `server-error-then-not-found.yaml`, `partner-rejects.yaml` |
+| `duplicate` | `duplicate-request.yaml`, `duplicate-notification.yaml` |
+| `reconciliation` | `statement-drift.yaml`, `ledger-only-break.yaml` |
+
+**They run.** `tests/PaymentsBench.Scenarios` discovers every file and runs it end to end, in
+process, against a fresh API and simulator pair, on in-memory storage and, when
+`PAYMENTSBENCH_TEST_POSTGRES` is set as in CI, on PostgreSQL; every `expect` key is asserted, and an
+unknown step or key fails the case (ADR 0012). CI gates on it as a named step. Register row R3 is
+closed. The runner exercises real HTTP serialisation and the real resilience pipeline without a
+socket; it does not exercise a process boundary or a real clock. One of its own defects, a timeout
+scenario that passed without its timeout (F-8), is the reason the runner checks itself
+(`RunnerSelfTests`).
 
 ## 13. CI and governance
 
-`.github/workflows/ci.yml` runs on every pull request and on pushes to `main`: restore, build in
-Release, test, and upload the test results. `AGENTS.md` sets the rules of the road: .NET 10,
-`dotnet build -warnaserror` and `dotnet test` before a push with analyzers on, one pull request per
-change against `main` with CI green before merge, scheme rules and scenarios as data, nothing that
-talks to a real bank, no secrets in the tree.
+The tests on `main`, counted by `dotnet test` against PostgreSQL on 2026-10-13 at `579e135`:
 
-Two documents carry the governance that code cannot:
+| Project | Tests |
+|---|---|
+| `tests/PaymentsBench.Domain.Tests` | 30 |
+| `tests/PaymentsBench.Application.Tests` | 104 |
+| `tests/PaymentsBench.Api.Tests` | 89 |
+| `tests/PaymentsBench.Iso20022.Tests` | 62 |
+| `tests/PaymentsBench.Integration.Tests` | 41 |
+| `tests/PaymentsBench.Scenarios` | 27 |
+| `tests/PaymentsBench.ServiceDefaults.Tests` | 12 |
+| **Total** | **365** |
 
-- the **register** ([`REGISTER.md`](REGISTER.md)): a change that closes a row moves it to *Closed*
-  with the date; a change that opens a gap adds a row; the register is never silently wrong;
-- the **decision records** ([`adr/`](adr/)): a new decision is a new record, not an edit.
+`tests/PaymentsBench.E2E` adds a Playwright suite, run by CI's end-to-end job against the API and
+the simulator in the degraded mode and against the documentation site from `file://`.
 
-Further work is planned in three streams, each in its own plan file under [`plans/`](plans/): core
-and correctness (migrations, a scenario runner, a resolver sweep, calendars, an ISO 20022 edge,
-integration tests against PostgreSQL), platform (repository baseline, containers, deployment,
-identity, load tests, a security review), and documentation (this document and its PDF and site
-editions). Until a slice merges it is a plan, and this document does not describe it as done.
+`.github/workflows/ci.yml` runs on every pull request and on pushes to `main`: build with warnings
+as errors, all tests against a `postgres:16-alpine` service container, the scenarios as their own
+gate, the documentation lint (markdownlint, relative links, diagrams byte-identical with
+`DIAGRAMS.md`, the house style of the papers, the generated site current), and the end-to-end
+suite. Beside it: `codeql.yml`, `secret-scan.yml` (gitleaks over the full history), `lint.yml`,
+`containers.yml` (images built and smoke-tested), `deploy.yml` (tag-driven Fly.io deploy, which has
+never deployed), `load.yml` (the k6 run, on demand), `build-overview-pdf.yml` and
+`deploy-pages.yml`.
+
+`AGENTS.md` sets the rules of the road, and two documents carry the governance that code cannot:
+the **register** ([`REGISTER.md`](REGISTER.md)), where a change that closes a row moves it to
+*Closed* with its proof and a change that opens a gap adds a row, so the register is never silently
+wrong; and the **decision records** ([`adr/`](adr/)), where a new decision is a new record. The work
+arrived in three streams, each with its plan in [`plans/`](plans/), one pull request per slice; the
+plans list every slice with its pull request.
 
 ## 14. What the tests and the walk-through caught
 
-**Five findings, none caught by a unit test** ([`FINDINGS.md`](FINDINGS.md)):
+**Eighteen findings, none caught by a unit test failing on its own** ([`FINDINGS.md`](FINDINGS.md)):
 
 | # | Defect | Found by | Status |
 |---|---|---|---|
-| F-1 | Enums crossed the wire as integers; every partner notification and statement line failed to bind | HTTP walk-through | Fixed |
-| F-2 | A timeout after the partner accepted surfaced as a 500, not as an Unknown outcome | HTTP walk-through | Fixed |
-| F-3 | The resolver reports `SafeToResubmit` after a resubmit whose own outcome is unknown | Writing this document | Open |
-| F-4 | A returned payment is an `OnStatementOnly` break for its settlement day | Writing this document | Open |
-| F-5 | The status lookup is never retried on an exception, only on a 5xx | Writing this document | Open |
+| F-1 | Enums crossed the wire as integers | HTTP walk-through | Fixed |
+| F-2 | A timeout after the partner accepted surfaced as a 500 | HTTP walk-through | Fixed |
+| F-3 | The resolver said `SafeToResubmit` after a resubmit whose outcome was unknown | Writing this document | Fixed (#21) |
+| F-4 | A returned payment was a break on its settlement day | Writing this document | Fixed (#23) |
+| F-5 | A status lookup that threw was never retried | Writing this document | Fixed (#23) |
+| F-6 | A writer that lost a race overwrote the winner | Reading the code behind R6 | Fixed (#22) |
+| F-7 | `resolve` answered 500 while the partner circuit was open | k6 load run | Fixed (#21) |
+| F-8 | A timeout scenario passed without its timeout | A scenario that should have failed | Fixed (#23) |
+| F-9 | The F-5 fix retried an open circuit | k6 re-run | Fixed (#30) |
+| F-10 | Images stopped publishing when scheme data became required | Containers workflow | Fixed (#11) |
+| F-11 | An empty metrics switch crashed start-up | Starting the service | Fixed (#9) |
+| F-12 | A telemetry test read its exporter too early | A flaky CI run | Fixed (#28) |
+| F-13 | Register rows fell out of the register table | Review | Fixed (#27) |
+| F-14 | A payment has no owner; the idempotency key is global | Security review | Open (R21) |
+| F-15 | The simulator cannot count submissions | k6 load run | Open (R15) |
+| F-16 | The image build's analyzers differ from CI's | Containers workflow | Open |
+| F-17 | GHCR packages start private | Deploy workflow | Open (R14) |
+| F-18 | Parallel streams took the same numbers | Merging the streams | Open |
 
-The pattern is the finding. The 37 tests are good at what they test: the state machine, the
-postings, idempotency, the resolver's decisions, the inbox. They do it in one process, against
-in-memory stores and a scripted partner, so a defect that lives between processes (F-1), in a
-library's exception types (F-2), in an HTTP pipeline no test drives (F-5), or in an assumption the
-code and its tests share (F-3, F-4) cannot
-fail them. F-2 is also the best evidence for the design: the defect was real, and the rule that the
-status is committed before the call meant it cost an error message, not a duplicate transfer.
+The pattern is the finding. The unit tests are good at what they test: the state machine, the
+postings, idempotency, the resolver's decisions, the inbox. They run in one process against
+in-memory stores and a scripted partner. The defects lived elsewhere: between processes (F-1),
+in a library's exception types and an HTTP pipeline (F-2, F-5, F-7, F-9), in persistence (F-6),
+in the measuring instrument itself (F-8, F-12), in the build and delivery path (F-10, F-11, F-16,
+F-17), and in assumptions the code and its tests shared (F-3, F-4, F-14). Two of them, F-7 and F-9,
+only appeared under load.
+
+F-2 remains the best evidence for the design: the defect was real, and the rule that the status is
+committed before the call meant it cost an error message, not a duplicate transfer.
 
 ## 15. Production readiness, honestly
 
-What would have to change before this moved anyone's money, stated without softening:
+What would have to change before this moved anyone's money, from the open rows of the register:
 
-- **The partner is simulated.** Nothing has talked to a real bank or a scheme sandbox, no ISO 20022
-  message is produced or parsed, and the partner's support for lookup by end-to-end id is an
-  assumption the simulator was written to satisfy (R1, R2, ADR 0001).
-- **The scenarios do not run.** Seven files specify the behaviour that matters most; none is
-  executed end to end (R3). The two findings that a walk-through caught have no automated guard.
-- **PostgreSQL has not run in CI.** The EF Core stores compile and the schema is applied with
-  `EnsureCreated`; no test has written a payment to a real database, and no migration exists (R4).
-- **The degraded mode is degraded.** In memory, the unit of work is a no-op, so "in the same
-  commit" holds only because nothing commits; there is no outbox dispatcher; nothing survives a
-  restart. The log says so at start-up; a reader of this document should know it too.
-- **Concurrency is a column.** `Version` is a concurrency token; nothing proves two writers on one
-  payment lose cleanly (R6).
-- **Nothing resolves on its own.** A payment can sit at `Submitted` until someone calls resolve
-  (R8, ADR 0001).
-- **No load, no chaos.** Throughput has never been measured and faults are switched by hand (R9).
-- **No authentication on the API, no sanctions, AML or limits.** The service moves any amount to any
-  account for any caller (R10 for the compliance controls).
-- **Three open defects** (F-3, F-4, F-5) sit in the resolver's reporting, in reconciliation and in
-  the lookup's retry policy.
+- **The partner is simulated.** Nothing has talked to a real bank or a scheme sandbox (R1). The
+  ISO 20022 edge reads and writes `pain.001` and `camt.053`, but against hand-written samples never
+  validated against the official schemas (R20), and the gateway still submits JSON.
+- **Nothing has been deployed.** The Fly.io topology, the tag-driven workflow and
+  [`DEPLOYMENT.md`](DEPLOYMENT.md) exist and validate offline; no tag has deployed anything (R14),
+  and the deployment's security settings live outside the tree and are unverified (R26).
+- **Payments have no owner.** Any token holder can read, list and submit any payment, and the
+  idempotency key and end-to-end id are global (R21, R22). The security review says to deploy
+  single-operator only until R21 closes. There is no rate limiting (R23), no separation of operator
+  actions and no record of who did what (R24), and hostile input is only partly bounded (R25).
+- **The partner webhook trusts a bearer token**, not a partner signature (R13).
+- **No broker has carried an event** (R5); the outbox contract is proved in process only.
+- **The load numbers are in memory, on one instance, anonymous** (R15), and have not been re-run
+  since the F-9 fix.
+- **The sweep is proved in process, and its alert is prose** (R17). **The computed value date is not
+  stamped on the payment** (R11). **A return day cannot reconcile** (R18). **A concurrent duplicate
+  initiate answers 409, not the original 201** (R19). **The integration fixture's Docker fallback and
+  concurrent migration are untested** (R12).
+- **Sanctions, AML and limits are absent** (R10), by scope.
 
 ## 16. The register
 
-[`REGISTER.md`](REGISTER.md) has ten open rows and none closed, quoted here by their headlines:
+[`REGISTER.md`](REGISTER.md) on `main` has eighteen open rows and nine closed, each with a date and,
+for the closed ones, the tests or runs that prove it. Open rows, by headline:
 
-| # | Since | Not proved |
-|---|---|---|
-| R1 | 2026-10-13 | Nothing here has ever talked to a real bank. |
-| R2 | 2026-10-13 | No ISO 20022 message is parsed or produced. |
-| R3 | 2026-10-13 | The scenario files are a specification, not an executed suite. |
-| R4 | 2026-10-13 | PostgreSQL persistence has not run in CI. |
-| R5 | 2026-10-13 | The outbox dispatcher publishes to a log line. |
-| R6 | 2026-10-13 | Concurrency is a column, not a test. |
-| R7 | 2026-10-13 | The business calendar is weekends only. |
-| R8 | 2026-10-13 | The resolver is called, never scheduled. |
-| R9 | 2026-10-13 | No load, no chaos. |
-| R10 | 2026-10-13 | Sanctions, AML, limits: absent. |
+| # | Not proved |
+|---|---|
+| R1 | Nothing here has ever talked to a real bank. |
+| R5 | No broker has ever carried an event. |
+| R10 | Sanctions, AML, limits: absent. |
+| R11 | The computed value date is not stamped on the payment. |
+| R12 | The Testcontainers path of the integration fixture has not run, and concurrent migration is untested. |
+| R13 | The partner webhook is authenticated with a bearer token and a grant, not a partner signature. |
+| R14 | Nothing has been deployed. |
+| R15 | The load numbers are in memory, on one machine, anonymous. |
+| R17 | The sweep is proved in process, and its alert is prose. |
+| R18 | A return has no statement line of its own. |
+| R19 | A concurrent duplicate initiate returns 409, not the original 201 body. |
+| R20 | The ISO 20022 samples are ours, not a bank's. |
+| R21 | A payment has no owner, and the idempotency key is global. |
+| R22 | The end-to-end id is global: another caller's id answers 409, and the message is wrong for it. |
+| R23 | There is no rate limiting. |
+| R24 | Operator-only actions are not separated, and nothing records who did what. |
+| R25 | Hostile input and a hostile partner are only partly handled. |
+| R26 | The deployment's security settings are unverified, and most live outside the tree. |
 
-Each row has a closing condition in the register itself. R10 is out of scope for the bench and stays
-open as a statement of scope.
+Closed, with proof in the register: R2 (ISO 20022), R3 (scenarios execute), R4 (PostgreSQL in CI),
+R6 (concurrency), R7 (calendars), R8 (the resolver is scheduled), R9 (load and chaos measured), R16
+(`resolve` during an open circuit) and R27 (an open circuit is not retried). R10 is out of scope for
+the bench and stays open as a statement of scope.
 
 ## 17. Architecture decision records
 
@@ -486,6 +558,16 @@ open as a statement of scope.
 | [0004](adr/0004-the-overview-pdf-is-built-on-demand.md) | The overview PDF is built on demand, on pull requests touching its sources, and on tags; never committed. |
 | [0005](adr/0005-the-documentation-site-is-generated.md) | The documentation site is generated from one source and one facts file, and checked for staleness in CI. |
 | [0006](adr/0006-the-site-loads-no-external-resource.md) | The site loads no external resource and works from `file://`. |
+| [0007](adr/0007-business-calendars-are-dated-covered-data.md) | Business calendars are dated, covered data; a date outside coverage is an error. |
+| [0008](adr/0008-schema-migrated-by-a-hosted-service-behind-a-gate.md) | The schema is migrated by a hosted service behind a gate. |
+| [0009](adr/0009-api-validation-and-errors.md) | Built-in validation, one exception handler, one problem body. |
+| [0010](adr/0010-the-outbox-contract-and-why-a-broker-is-a-one-class-swap.md) | The outbox contract, and why a broker is a one-class swap. |
+| [0011](adr/0011-submitted-payments-are-swept-never-blindly-resubmitted.md) | Submitted payments are swept, never blindly resubmitted. |
+| [0012](adr/0012-scenarios-run-in-process-against-the-api-and-the-simulator.md) | Scenarios run in process against the API and the simulator. |
+| [0013](adr/0013-optimistic-concurrency-by-remembered-version.md) | Optimistic concurrency by remembered version; a concurrent duplicate initiate is a 409. |
+| [0014](adr/0014-iso-20022-at-the-edge-one-internal-model.md) | ISO 20022 at the edge, one internal model. |
+| [0015](adr/0015-identity-via-authservice-jwks.md) | Identity via authservice JWKS; anonymous only in Development. |
+| [0016](adr/0016-scoped-grants-for-the-webhook-and-back-office-reads.md) | Scoped grants for the partner webhook and the back-office reads; no anonymous mode on Fly; a request-size cap. |
 
 ## 18. Non-goals
 
@@ -493,6 +575,8 @@ open as a statement of scope.
   them.
 - **Talking to a real bank.** The partner is simulated, and every document says so.
 - **Compliance controls.** Sanctions screening, AML and limits are out of scope (R10).
+- **A real broker or a real bank connection.** The seams exist (`IEventPublisher`,
+  `IPartnerGateway`); what plugs into them is outside the bench (R1, R5).
 - **Inbound payments, FX, fees, multi-currency netting.** The rail is outbound, one currency per
   scheme.
 - **Fuzzy reconciliation.** Matching is exact; anything else is a new, named break kind (ADR 0003).
