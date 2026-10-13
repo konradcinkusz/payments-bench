@@ -66,3 +66,34 @@ jobs:
         run: npm run lint:papers
       - name: Check the generated site is current
         run: npm run site:check
+
+  e2e:
+    name: End-to-end (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build (Release)
+        run: dotnet build PaymentsBench.sln --configuration Release
+      - name: Install Playwright
+        working-directory: tests/PaymentsBench.E2E
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Run the suite (API and simulator in the degraded in-memory mode; the site from file://)
+        working-directory: tests/PaymentsBench.E2E
+        run: npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-report
+          path: |
+            tests/PaymentsBench.E2E/playwright-report
+            tests/PaymentsBench.E2E/screenshots
+          retention-days: 14

@@ -1,0 +1,17 @@
+{
+  "name": "payments-bench-e2e",
+  "version": "0.0.0",
+  "private": true,
+  "description": "End-to-end acceptance suite: drives the API and the partner simulator over HTTP and checks the documentation site renders. Browsers come from Playwright; nothing here is referenced by a .NET project.",
+  "license": "MIT",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "@types/node": "22.19.0"
+  }
+}
