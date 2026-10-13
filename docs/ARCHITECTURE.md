@@ -63,3 +63,8 @@ OpenTelemetry via `ServiceDefaults`: ASP.NET Core and HttpClient instrumentation
 `PaymentsBench` activity source and meter, the `payments.transitions` counter tagged by status.
 OTLP export switches on with `OTEL_EXPORTER_OTLP_ENDPOINT`. The Aspire dashboard shows all of it
 with no configuration.
+
+Health-check and `/metrics` requests are filtered out of traces (P15). `/metrics` (Prometheus
+exposition) exists only with `Metrics:Prometheus:Enabled=true`; every label's bound is written down
+in [`docs/ops/README.md`](ops/README.md), which also holds the provisioned Grafana dashboard, the
+scrape config and the stuck-Submitted alert threshold.
