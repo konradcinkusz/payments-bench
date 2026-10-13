@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Hand-written in the published pain.001.001.09 shape. Fictitious parties, standard example IBANs.
-     Not validated against the official schema and not issued by a bank (register R17). -->
+     Not validated against the official schema and not issued by a bank (register R18). -->
 <Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.001.001.09">
   <CstmrCdtTrfInitn>
     <GrpHdr>

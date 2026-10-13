@@ -1,4 +1,4 @@
-# ADR 0011: ISO 20022 at the edge, one internal model
+# ADR 0012: ISO 20022 at the edge, one internal model
 
 **Status:** accepted, 2026-10-13
 
@@ -54,5 +54,5 @@ boundary, once, and nothing downstream knows there was more than one dialect.
 - A second dialect (another pain.001 version, pain.008) is another reader and table row in this project;
   nothing else changes.
 - The samples are ours. They are not validated against the official XSDs and none came from a bank
-  (R17); the readers accept what we believe the schema says.
+  (R18); the readers accept what we believe the schema says.
 - The gateway still submits JSON to the simulated partner. pain.001 is read at our API and goes no further.

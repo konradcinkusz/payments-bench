@@ -30,3 +30,6 @@ docs/diagrams/rendered/
 # secrets.env.example is the committed, placeholder-only documentation of every variable.
 secrets.env
 !secrets.env.example
+
+# k6 output
+k6-summary.json
