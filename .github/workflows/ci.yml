@@ -11,6 +11,18 @@ permissions:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -21,6 +33,8 @@ jobs:
       - name: Build
         run: dotnet build PaymentsBench.sln --no-restore --configuration Release
       - name: Test
+        env:
+          PAYMENTSBENCH_TEST_POSTGRES: Host=localhost;Port=5432;Username=postgres
         run: dotnet test PaymentsBench.sln --no-build --configuration Release --logger "trx;LogFileName=results.trx"
       - uses: actions/upload-artifact@v4
         if: always()

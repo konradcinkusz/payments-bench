@@ -26,6 +26,7 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PaymentsBench.Domain.Tests", "tests\PaymentsBench.Domain.Tests\PaymentsBench.Domain.Tests.csproj", "{9CA36CFC-8766-48BB-BDAA-32AF02B28FAF}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PaymentsBench.Api.Tests", "tests\PaymentsBench.Api.Tests\PaymentsBench.Api.Tests.csproj", "{AF05DB5A-8207-4C7B-AA87-7A860212CAC5}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PaymentsBench.Integration.Tests", "tests\PaymentsBench.Integration.Tests\PaymentsBench.Integration.Tests.csproj", "{960258B7-D914-42A0-A41E-54ACB130C623}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -157,6 +158,18 @@ Global
 		{AF05DB5A-8207-4C7B-AA87-7A860212CAC5}.Release|x64.Build.0 = Release|Any CPU
 		{AF05DB5A-8207-4C7B-AA87-7A860212CAC5}.Release|x86.ActiveCfg = Release|Any CPU
 		{AF05DB5A-8207-4C7B-AA87-7A860212CAC5}.Release|x86.Build.0 = Release|Any CPU
+		{960258B7-D914-42A0-A41E-54ACB130C623}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{960258B7-D914-42A0-A41E-54ACB130C623}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{960258B7-D914-42A0-A41E-54ACB130C623}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{960258B7-D914-42A0-A41E-54ACB130C623}.Debug|x64.Build.0 = Debug|Any CPU
+		{960258B7-D914-42A0-A41E-54ACB130C623}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{960258B7-D914-42A0-A41E-54ACB130C623}.Debug|x86.Build.0 = Debug|Any CPU
+		{960258B7-D914-42A0-A41E-54ACB130C623}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{960258B7-D914-42A0-A41E-54ACB130C623}.Release|Any CPU.Build.0 = Release|Any CPU
+		{960258B7-D914-42A0-A41E-54ACB130C623}.Release|x64.ActiveCfg = Release|Any CPU
+		{960258B7-D914-42A0-A41E-54ACB130C623}.Release|x64.Build.0 = Release|Any CPU
+		{960258B7-D914-42A0-A41E-54ACB130C623}.Release|x86.ActiveCfg = Release|Any CPU
+		{960258B7-D914-42A0-A41E-54ACB130C623}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -172,5 +185,6 @@ Global
 		{7B79612E-32A0-473A-9555-2FD809EA1A19} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{9CA36CFC-8766-48BB-BDAA-32AF02B28FAF} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{AF05DB5A-8207-4C7B-AA87-7A860212CAC5} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{960258B7-D914-42A0-A41E-54ACB130C623} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal
