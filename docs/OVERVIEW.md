@@ -543,5 +543,6 @@ will say where it is once it has merged.
 The publishing half is on `main`: `.github/workflows/deploy-pages.yml` uploads `docs/` to Pages on a
 push to `main` that touches `docs/`, and on demand. It needs one step by hand that no API can
 perform: **Settings > Pages > Build and deployment > Source = GitHub Actions**. Until that is set,
-the deploy job fails with a "Pages not enabled" error. [`DEPLOYMENT-DOCS.md`](DEPLOYMENT-DOCS.md)
+the workflow fails (`configure-pages` with "Get Pages site failed", then the deploy job with a
+"Pages not enabled" error). [`DEPLOYMENT-DOCS.md`](DEPLOYMENT-DOCS.md)
 has the detail.

@@ -13,8 +13,9 @@ below describe how each will work and say what is not there yet.
 
 **Settings > Pages > Build and deployment > Source = GitHub Actions.** Do this once, as a
 repository administrator. No workflow or API token the repository holds can do it. Until it is
-done, the `deploy` job of [`deploy-pages.yml`](../.github/workflows/deploy-pages.yml) fails with a
-"Pages not enabled" error; nothing in the workflow is wrong and nothing in it needs fixing.
+done, [`deploy-pages.yml`](../.github/workflows/deploy-pages.yml) fails: first the `configure-pages`
+step of the `build` job ("Get Pages site failed"), and the `deploy` job with a "Pages not enabled"
+error. Nothing in the workflow is wrong and nothing in it needs fixing.
 
 After the setting is changed, re-run the failed job or start the workflow from the Actions tab
 (`workflow_dispatch`). The published address is shown on the `github-pages` environment and in
@@ -58,7 +59,7 @@ Source for the PDF is `docs/papers/`, a LaTeX presentation of
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `deploy` fails: "Pages not enabled" / `Get Pages site failed` | The Source setting is not "GitHub Actions" | The manual step above, then re-run |
+| `build` fails at `configure-pages` with "Get Pages site failed", or `deploy` fails with "Pages not enabled" | The Source setting is not "GitHub Actions" | The manual step above, then re-run |
 | Site shows old facts | `docs/index.html` was not regenerated | `npm run site:build`, commit; CI would have caught it |
 | `site:check` red on a PR | A fact the page reads changed (register, scenarios, findings) | `npm run site:build`, commit the page |
 | Deploy waits | Another deploy holds the `pages` concurrency group | Wait; runs are queued on purpose |

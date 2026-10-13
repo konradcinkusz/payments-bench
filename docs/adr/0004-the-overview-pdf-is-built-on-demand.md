@@ -39,5 +39,6 @@ at zero for the pull requests that do not touch the sources, which is most of th
 - A pull request that touches the sources carries a LaTeX build in its checks, which is slower
   than the Markdown lint alone.
 - The edition can lag `OVERVIEW.md` between releases. The Markdown is the source of truth; the
-  PDF says which commit it was built from.
+  PDF header carries the build date and its title block
+  names `docs/OVERVIEW.md` as its source; it does not name a commit.
 - Until slice C4 has merged this record describes a decision, not a workflow on `main`.

@@ -9,8 +9,8 @@ name: deploy-pages
 # useful; see docs/DEPLOYMENT-DOCS.md.)
 #
 # Requires a one-time repository setting that no API can perform: Settings > Pages >
-# Build and deployment > Source: "GitHub Actions". Before that, the deploy job fails with a
-# "Pages not enabled" error and there is nothing in this workflow to fix.
+# Build and deployment > Source: "GitHub Actions". Before that, the workflow fails (configure-pages
+# with "Get Pages site failed", then deploy with a "Pages not enabled" error) and there is nothing in this workflow to fix.
 
 on:
   push:
