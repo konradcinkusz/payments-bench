@@ -28,16 +28,32 @@ public sealed class InMemoryPaymentRepository : IPaymentRepository
 
     public Task<PaymentPage> ListAsync(PaymentQuery query, CancellationToken cancellationToken)
     {
-        var filtered = _payments.Values.Where(p =>
-            (query.Status is null || p.Status == query.Status)
-            && (query.Scheme is null || p.Scheme == query.Scheme)
-            && (query.EndToEndId is null || p.EndToEndId == query.EndToEndId)
-            && (query.CreatedFrom is null || p.CreatedAt >= query.CreatedFrom)
-            && (query.CreatedTo is null || p.CreatedAt <= query.CreatedTo)).ToList();
+        var filtered = _payments.Values.Where(p => Matches(p, query)).ToList();
 
         var counts = filtered.GroupBy(p => p.Status).ToDictionary(g => g.Key, g => g.Count());
         var items = filtered.OrderByDescending(p => p.CreatedAt).ThenBy(p => p.Id).Skip(query.Skip).Take(query.Limit).ToList();
         return Task.FromResult(new PaymentPage(items, filtered.Count, counts));
+    }
+
+    private static bool Matches(Payment payment, PaymentQuery query)
+    {
+        if (query.Status is not null && payment.Status != query.Status)
+        {
+            return false;
+        }
+
+        if (query.Scheme is not null && payment.Scheme != query.Scheme)
+        {
+            return false;
+        }
+
+        if (query.EndToEndId is not null && payment.EndToEndId != query.EndToEndId)
+        {
+            return false;
+        }
+
+        return (query.CreatedFrom is null || payment.CreatedAt >= query.CreatedFrom)
+            && (query.CreatedTo is null || payment.CreatedAt <= query.CreatedTo);
     }
 
     public Task AddAsync(Payment payment, CancellationToken cancellationToken)

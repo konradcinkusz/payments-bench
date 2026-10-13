@@ -19,8 +19,9 @@ public static class ApiServiceCollectionExtensions
         services.AddProblemDetails();
         services.AddExceptionHandler<ProblemDetailsExceptionHandler>();
         services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
-        services.AddSingleton(new ActivitySource("PaymentsBench"));
-        services.AddSingleton(new Meter("PaymentsBench"));
+        // Built by factory so the container owns them and disposes them at shutdown.
+        services.AddSingleton(_ => new ActivitySource("PaymentsBench"));
+        services.AddSingleton(_ => new Meter("PaymentsBench"));
         services.AddSingleton<PaymentMetrics>();
         return services;
     }
