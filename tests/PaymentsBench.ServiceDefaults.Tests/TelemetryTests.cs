@@ -40,9 +40,28 @@ public sealed class TelemetryTests
         await client.GetAsync("/health");
         await client.GetAsync("/alive");
         await client.GetAsync("/ping");
-        app.Services.GetRequiredService<TracerProvider>().ForceFlush();
 
-        var names = spans.Select(s => s.DisplayName).ToList();
+        // The test client can see the response before the hosting layer stops the request's
+        // activity, so the /ping span may not be exported yet. Wait for it; the probes ran
+        // before it, so once /ping is in, any span they produced would be in too.
+        var tracer = app.Services.GetRequiredService<TracerProvider>();
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        List<string> names;
+        do
+        {
+            tracer.ForceFlush();
+            // ToArray copies without enumerating, so an export landing mid-read cannot throw.
+            names = spans.ToArray().Select(s => s.DisplayName).ToList();
+
+            if (names.Exists(n => n.Contains("/ping")))
+            {
+                break;
+            }
+
+            await Task.Delay(20);
+        }
+        while (DateTime.UtcNow < deadline);
+
         Assert.Contains(names, n => n.Contains("/ping"));
         Assert.DoesNotContain(names, n => n.Contains("/health") || n.Contains("/alive"));
     }
