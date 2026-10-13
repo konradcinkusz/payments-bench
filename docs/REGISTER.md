@@ -11,15 +11,52 @@ Rows are deleted only when the closing condition is met; a closed row moves to t
 | R5 | 2026-10-13 | **The outbox dispatcher publishes to a log line.** No broker is wired; at-least-once delivery to a consumer is a design claim. | An `IEventPublisher` against a real broker, and a consumer-side dedupe test. |
 | R6 | 2026-10-13 | **Concurrency is a column, not a test.** `Version` is a concurrency token; no test races two writers on one payment. | A test that proves one of two concurrent updates fails with a concurrency exception. |
 | R8 | 2026-10-13 | **The resolver is called, never scheduled.** `POST /payments/{id}/resolve` exists; nothing sweeps Submitted payments older than N seconds on its own. | A background sweep with a metric on the age of the oldest Submitted payment, and an alert threshold documented. |
-| R9 | 2026-10-13 | **No load, no chaos.** Nothing has measured throughput, and the simulator's faults are set by hand, not injected randomly under load. | A k6 or equivalent run with the simulator cycling fault profiles, and numbers in this file. |
 | R10 | 2026-10-13 | **Sanctions, AML, limits: absent.** The service moves any amount to any account. | Out of scope for the bench; stays open as a statement of scope. |
 | R11 | 2026-10-13 | **The computed value date is not stamped on the payment.** `ValueDateCalculator` and the per-scheme `HolidayCalendar` exist and are tested, but nothing calls them at submit or acceptance; `Payment.ValueDate` is still set only when the partner reports settlement (or defaults to today's date). The calendars are proved; the value date a customer is shown at submission is not. | `SubmitPaymentHandler` (or acceptance) computes the value date from the scheme's rules and calendar, stamps it on the payment (a domain and schema change), and a test pins it for a known closing day. |
 | R12 | 2026-10-13 | **The Testcontainers path of the integration fixture has not run, and concurrent migration is untested.** CI and local runs use `PAYMENTSBENCH_TEST_POSTGRES`; the fallback that starts `postgres:16-alpine` through Docker was only seen failing loudly. Several instances migrating at once rely on EF Core's migration lock. | A run on a machine with Docker and no env var, and a test that starts two migrations against one database. |
 | R13 | 2026-10-13 | **The partner webhook is authenticated with a bearer token, not a partner signature.** `/partner/notifications` falls under the API's fallback policy, so the sender needs a token from authservice; a real partner would sign the payload (HMAC) or present a client certificate (mTLS), and nothing here verifies either. | Partner notifications are verified by a partner-held key (signature or mTLS) and a test rejects an unsigned one. |
+| R14 | 2026-10-13 | **The load numbers are in memory, on one machine, anonymous.** The run in [Load numbers](#load-numbers-r9) used in-memory stores (no PostgreSQL), one API instance, one simulator, loopback networking, and the Development policy that allows anonymous calls. It says nothing about PostgreSQL under load, the authenticated path, or more than one instance. The simulator also cannot report how many times a transfer was submitted (it keys transfers by end-to-end id and answers a repeat with the existing one), so "no duplicate transfers" is checked only through `duplicate_payments` and `simulator_mismatches`, not by counting submissions at the partner. | The same `k6/payments.js` run against PostgreSQL with the authenticated path (authservice), on at least two API instances, plus a submission counter on the simulator so duplicate transfers are counted where they would occur. |
+| R15 | 2026-10-13 | **`POST /payments/{id}/resolve` answers 500 when the partner circuit is open.** The load run found it (Finding below): failed submits trip the circuit breaker that `GetStatusAsync` shares, and `HttpPartnerGateway.GetStatusAsync` does not catch `BrokenCircuitException`, so the resolver call fails with an unhandled exception instead of leaving the payment `Submitted`. Not fixed here; the load script is unchanged so the threshold keeps reporting it. | A test that opens the circuit and proves `resolve` answers 2xx or a retryable 503 with the payment still `Submitted`, and a load run with `real_errors` under its threshold in every profile. |
+
+## Load numbers (R9)
+
+First run of `k6/payments.js` through `scripts/load-test.sh` (see [`k6/README.md`](../k6/README.md)),
+2026-10-13, on `main` at `5937b0a`. Everything is simulated: the partner is the
+`PaymentsBench.PartnerSimulator`, the stores are in memory.
+
+- **Machine:** 4 CPUs (`nproc`), 15 GiB RAM (`free -h`), `Linux 6.18.44-fc-v114 #1 SMP PREEMPT_DYNAMIC x86_64` (`uname -a`), a virtual machine; API, simulator and k6 shared it.
+- **Shape:** 10 virtual users on the `payments` scenario, 150 s, one full cycle of five profiles at 30 s each, set by a second scenario through `PUT /faults`. k6 v1.3.0.
+- **Requests per second** counts API requests only (initiate, replay, conflict, submit, resolve) in that profile's 30 s window. **p95** is the API's `http_req_duration`. **Real error rate** is the share of API requests that were a 5xx or an unexpected status; expected outcomes (`Submitted` with an unknown outcome, `Rejected`, 409 on a conflicting replay) are not errors.
+
+| Fault profile | Requests/s | p95 | Real error rate | Completed flows | Outcomes |
+|---|---|---|---|---|---|
+| `None` | 1210 | 16 ms | 0.00 % | 16896 | Accepted 16896 |
+| `Latency` (1.5 s) | 19.5 | 1507 ms | 0.00 % | 268 | Accepted 268 |
+| `TimeoutAfterAccept` (10 s) | 8.3 | 4009 ms | 4.00 % | 70 | resolved to Accepted 70 |
+| `ServerError` (503) | 1105 | 20 ms | 31.77 % | 5 | resolve answered SafeToResubmit 5 |
+| `RejectAll` (`AC01`) | 712 | 28 ms | 4.08 % | 8649 | Rejected 8649 |
+
+- **Duplicates:** 0 duplicate payments (about 1 in 10 initiates is replayed with the same key and must return the same payment id). 0 simulator mismatches (every `Accepted` payment had its transfer at the simulator, every `Rejected` one had none). 1814 expected 409s. **Duplicate transfers at the simulator are not counted**: the simulator cannot report submissions per end-to-end id (R14).
+- **Thresholds:** the run **failed** its error-rate thresholds (12.45 % overall against 1 %). Every real failure was `resolve` answering 500 (10531 in `ServerError`, 872 in `RejectAll`, 10 in `TimeoutAfterAccept`); `initiate` and `submit` had none. All p95 thresholds passed. Cause and row: R15.
+- **Reading the profiles:** `None` is the only profile with no fault; its 1210 requests/s is the in-memory ceiling for this machine and says nothing about PostgreSQL. `Latency` and `TimeoutAfterAccept` are bounded by 10 users each waiting 1.5 s and 4 s (the API's attempt timeout) on every submit. In `ServerError` and `RejectAll` the requests are fast because the circuit breaker is open or the partner answers at once; the high `ServerError` request rate is mostly failed `resolve` calls. A request that straddles a phase boundary keeps the profile it started in.
+
+### Finding: resolve fails with 500 while the circuit is open
+
+Under `ServerError` the API's first few submits reach the partner and get 503; the shared resilience
+pipeline's circuit breaker (50 % failure ratio, 10 calls in 30 s) opens, and from then on
+`GET /transfers/{endToEndId}` made by `resolve` throws `BrokenCircuitException`. Nothing in
+`GetStatusAsync` handles it, so ASP.NET Core answers 500. The same happens briefly after
+`TimeoutAfterAccept` (attempt timeouts count as failures) and after `ServerError` ends, while the
+breaker is still open (`RejectAll`). Reproduced by hand with 14 sequential payments under
+`ServerError`: the first three resolves answer 200, every later one 500. The payment is not
+corrupted (`submit` already left it `Submitted`), so the harm is a failing recovery path exactly
+when recovery is needed, not a lost or duplicated transfer. Recorded as R15; the code is stream A's
+and is not changed here.
 
 ## Closed
 
 | # | Closed | Was not proved | Proved by |
 |---|---|---|---|
+| R9 | 2026-10-13 | **No load, no chaos.** Nothing had measured throughput, and the simulator's faults were set by hand, not injected under load. | `k6/payments.js` runs 10 virtual users for 150 s while a second scenario cycles the simulator through `None`, `Latency`, `TimeoutAfterAccept`, `ServerError` and `RejectAll`; `scripts/load-test.sh` runs it and `.github/workflows/load.yml` runs it on demand. The numbers per profile are in [Load numbers](#load-numbers-r9). The run closes the row's condition and also failed its own error-rate threshold, which is R15. What it does not prove is R14. |
 | R7 | 2026-10-13 | **The business calendar was weekends only.** No public holidays, no per-scheme calendar, no TARGET2 closing days. | Calendars are data under `scenarios/calendars/` (target2, uk-faster-payments, us-fedwire), loaded into `ISchemeCatalog` at start-up. `HolidayCalendarTests` (Christmas 2026 and Good Friday/Easter Monday 2026 move the SEPA value date; weekends closed; out-of-range dates throw `CalendarCoverageException`) and `SchemeCatalogTests` (real files load, every scheme resolves its calendar, Fedwire observed holidays, malformed or missing data names the file, unknown scheme and wrong currency refused). See ADR 0007. |
 | R4 | 2026-10-13 | **PostgreSQL persistence had not run in CI.** The EF Core stores compiled and the schema was applied with `EnsureCreated`; no integration test had written a payment to a real database. | The EF Core stores are exercised against a real PostgreSQL 16 by `tests/PaymentsBench.Integration.Tests`: `PaymentRepositoryTests` (every status round-trips), `LedgerTests`, `OutboxAndInboxTests`, `UnitOfWorkTests` (atomic commit and rollback), `HandlerTests` (initiate and submit on EF stores) and `MigrationTests` (migrations apply, nothing pending, no unmigrated model change). `EnsureCreated` is gone; the schema is the `InitialSchema` migration, applied by `MigrationHostedService` behind `MigrationGate` (`MigrationGateTests`, ADR 0008). CI job `build-and-test` runs them against a `postgres:16-alpine` service container. |

@@ -36,6 +36,7 @@ Each figure names the file it was measured in; the measurements were taken on `m
 | **The scenarios** | 7 files · 4 classes | [`scenarios/`](scenarios/) holds seven scenario files in the classes `happy`, `partner-failure`, `duplicate` and `reconciliation`. They are a specification; none is executed yet (R3). |
 | **The register** | 10 open rows | [`docs/REGISTER.md`](docs/REGISTER.md): R1 to R10, none closed. |
 | **The findings** | 5 | [`docs/FINDINGS.md`](docs/FINDINGS.md): F-1 and F-2 fixed, F-3 to F-5 open. |
+| **The load run** | 1210 requests/s, 0 duplicates | `k6/payments.js` with the simulator cycling five fault profiles, in memory, on one 4-CPU machine; per-profile numbers and what they do not prove are in [`docs/REGISTER.md`](docs/REGISTER.md) (R9, R14, R15). |
 | **The schemes** | 3 | [`scenarios/schemes.yaml`](scenarios/schemes.yaml): `sepa`, `faster-payments`, `swift`. |
 
 ## Run it
