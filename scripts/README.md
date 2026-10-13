@@ -33,7 +33,7 @@ the contract is written before the code reads them.
 | Tool | Where pinned | Version |
 |---|---|---|
 | .NET SDK | `global.json` (roll forward to latest feature band) | 10.0.100+ |
-| actionlint | `.github/workflows/lint.yml` (`ACTIONLINT_VERSION`) | 1.7.12 |
+| actionlint | `.github/workflows/lint.yml` (`ACTIONLINT_VERSION`); runs shellcheck when it is installed, so install shellcheck locally to match CI. Per-file ignores live in `.github/actionlint.yaml`. | 1.7.12 |
 | gitleaks | CI and fallback use `ghcr.io/gitleaks/gitleaks:latest` on purpose (a pinned scanner stops detecting what upstream adds later; see the comment in `secret-scan.yml`) | latest |
 
 ## Troubleshooting
