@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
+using PaymentsBench.Api.Identity;
 using PaymentsBench.Application.Payments;
 using PaymentsBench.Application.Ports;
 using PaymentsBench.Application.Reconciliation;
@@ -13,6 +14,7 @@ using PaymentsBench.ServiceDefaults;
 // Program.cs is the manifest: what this service is made of, in the order it starts.
 var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
+builder.AddPaymentsIdentity();
 builder.Services.AddOpenApi();
 builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddPaymentsInfrastructure(builder.Configuration);
@@ -21,8 +23,9 @@ builder.Services.AddSingleton(new Meter("PaymentsBench"));
 
 var app = builder.Build();
 app.Services.LogStorageMode();
+app.Services.LogAuthMode();
 app.MapDefaultEndpoints();
-app.MapOpenApi();
+app.MapOpenApi().AllowAnonymousInDevelopment(app.Environment);
 
 var meter = app.Services.GetRequiredService<Meter>();
 var transitions = meter.CreateCounter<long>("payments.transitions", description: "Payment status transitions, tagged by status.");
@@ -126,3 +129,6 @@ internal sealed record PaymentView(Guid Id, string EndToEndId, decimal Amount, s
 {
     public static PaymentView From(Payment p) => new(p.Id, p.EndToEndId, p.Amount.Amount, p.Amount.Currency, p.Status.ToString(), p.ReasonCode, p.PartnerReference, p.ValueDate, p.CreatedAt, p.UpdatedAt);
 }
+
+// Lets WebApplicationFactory reach the entry point.
+public partial class Program;

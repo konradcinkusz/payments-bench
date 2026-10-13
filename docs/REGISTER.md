@@ -15,6 +15,7 @@ Rows are deleted only when the closing condition is met; a closed row moves to t
 | R8 | 2026-10-13 | **The resolver is called, never scheduled.** `POST /payments/{id}/resolve` exists; nothing sweeps Submitted payments older than N seconds on its own. | A background sweep with a metric on the age of the oldest Submitted payment, and an alert threshold documented. |
 | R9 | 2026-10-13 | **No load, no chaos.** Nothing has measured throughput, and the simulator's faults are set by hand, not injected randomly under load. | A k6 or equivalent run with the simulator cycling fault profiles, and numbers in this file. |
 | R10 | 2026-10-13 | **Sanctions, AML, limits: absent.** The service moves any amount to any account. | Out of scope for the bench; stays open as a statement of scope. |
+| R11 | 2026-10-13 | **The partner webhook is authenticated with a bearer token, not a partner signature.** `/partner/notifications` falls under the API's fallback policy, so the sender needs a token from authservice; a real partner would sign the payload (HMAC) or present a client certificate (mTLS), and nothing here verifies either. | Partner notifications are verified by a partner-held key (signature or mTLS) and a test rejects an unsigned one. |
 
 ## Closed
 

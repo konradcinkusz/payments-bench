@@ -41,7 +41,7 @@ Each figure names the file it was measured in; the measurements were taken on `m
 ## Run it
 
 ```bash
-dotnet test                                   # 37 tests, no database needed
+dotnet test                                   # 49 tests, no database needed
 dotnet run --project src/PaymentsBench.AppHost   # Aspire: PostgreSQL + simulator + API + dashboard
 ```
 
@@ -51,6 +51,9 @@ Or without Aspire, in memory, two terminals:
 dotnet run --project src/PaymentsBench.PartnerSimulator   # http://localhost:5101
 dotnet run --project src/PaymentsBench.Api                # http://localhost:5100
 ```
+
+Every endpoint except `/health` and `/alive` needs a bearer token from authservice (`Auth__Authority`, `Auth__Issuer`, `Auth__Audience`); add `-H "Authorization: Bearer $TOKEN"` to the calls below.
+In Development with no `Auth__Authority` the API logs a warning and allows anonymous calls, so the calls below work as written; any other environment refuses to start without it.
 
 Then walk a transfer through its life:
 
