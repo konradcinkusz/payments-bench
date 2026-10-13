@@ -1,0 +1,75 @@
+name: Fly.io scale
+
+# Manual scale of the stateless apps. PostgreSQL is never touched: an app with a volume cannot be
+# scaled out (a second machine gets a second, empty volume). Every app keeps min_machines_running = 1
+# in its toml, so `wind-down` stops machines the proxy would otherwise keep; `start` brings them back.
+#
+# Guarded like deploy.yml: without FLY_API_TOKEN it writes a summary and finishes green.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: What to do with api, partner and authservice
+        type: choice
+        options: [status, wind-down, start, api-two, api-one]
+        default: status
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  FLYCTL_VERSION: '0.3.200'
+  FLYCTL_SHA256: c174cbb0f245ce820a1c2da63db6d3248ab34cdb58016fb756e1c3eb0f13f2dc
+
+jobs:
+  scale:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      ACTION: ${{ inputs.action }}
+    steps:
+      - name: Check for a Fly token
+        id: guard
+        run: |
+          if [ -n "${FLY_API_TOKEN:-}" ]; then echo "enabled=true" >> "$GITHUB_OUTPUT"; else echo "enabled=false" >> "$GITHUB_OUTPUT"; fi
+      - name: Summary (no FLY_API_TOKEN)
+        if: steps.guard.outputs.enabled != 'true'
+        run: |
+          {
+            echo "### Fly.io scale (\`$ACTION\`): skipped"
+            echo
+            echo "Skipped because \`FLY_API_TOKEN\` is not set in the \`production\` environment. Nothing failed."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Install flyctl
+        if: steps.guard.outputs.enabled == 'true'
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/flyctl.tgz" "https://github.com/superfly/flyctl/releases/download/v${FLYCTL_VERSION}/flyctl_${FLYCTL_VERSION}_Linux_x86_64.tar.gz"
+          echo "${FLYCTL_SHA256}  $RUNNER_TEMP/flyctl.tgz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/flyctl.tgz" -C "$RUNNER_TEMP" flyctl
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Apply
+        if: steps.guard.outputs.enabled == 'true'
+        run: |
+          set -euo pipefail
+          stateless="payments-bench-authservice payments-bench-partner payments-bench-api"
+          case "$ACTION" in
+            status)
+              for app in $stateless payments-bench-postgres; do flyctl status --app "$app" || true; done ;;
+            wind-down)
+              for app in payments-bench-api payments-bench-partner payments-bench-authservice; do
+                for id in $(flyctl machine list --app "$app" --json | jq -r '.[].id'); do flyctl machine stop "$id" --app "$app"; done
+              done ;;
+            start)
+              for app in $stateless; do
+                for id in $(flyctl machine list --app "$app" --json | jq -r '.[].id'); do flyctl machine start "$id" --app "$app"; done
+              done ;;
+            api-two) flyctl scale count 2 --app payments-bench-api --yes ;;
+            api-one) flyctl scale count 1 --app payments-bench-api --yes ;;
+          esac
+          echo "### Fly.io scale: \`$ACTION\` applied" >> "$GITHUB_STEP_SUMMARY"

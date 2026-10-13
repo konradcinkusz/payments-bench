@@ -1,0 +1,47 @@
+# payments-bench-partner: the SIMULATED partner bank. Not a real bank, not a sandbox of one: an
+# invented API shape with faults a test can set by hand (PaymentsBench.PartnerSimulator).
+#
+# Private by design. The deploy passes --no-public-ips, so the app has no public address; the API
+# reaches it at http://payments-bench-partner.internal:8080 over the 6PN network. Its fault
+# controls (PUT /faults) are open on purpose and must never face the internet.
+#
+# No secrets: there is nothing here to protect except availability.
+
+app = "payments-bench-partner"    # globally unique across all of Fly: <system>-<service>
+primary_region = "fra"            # same region as the API: the in-request hop stays local
+
+[build]
+  # Only used by a hand-run `flyctl deploy` without --image (the pipeline passes the GHCR image).
+  # Paths resolve relative to THIS file; the Dockerfile copies from src/, so context is the root.
+  dockerfile = "../src/PaymentsBench.PartnerSimulator/Dockerfile"
+  context = ".."
+
+[env]
+  ASPNETCORE_ENVIRONMENT = "Production"
+  ASPNETCORE_URLS = "http://+:8080"   # all interfaces; must equal internal_port below
+
+[http_service]
+  internal_port = 8080              # must equal the port the process binds
+  force_https = true                # moot without a public IP; kept so an allocated one is never plain http
+  auto_stop_machines = "stop"       # beyond the minimum, the proxy may stop idle machines
+  auto_start_machines = true        # and start one on demand
+  # 1, not 0: the API calls the partner inside a payment request, and reaches it over .internal,
+  # which does NOT wake a stopped machine. Scaling this to zero would turn every idle-then-pay
+  # into a failed submit. Synchronous path.
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 250                # the proxy queues past this
+    soft_limit = 200                # the proxy prefers another machine past this
+
+  [[http_service.checks]]
+    path = "/health"                # the simulator's health endpoint
+    interval = "30s"                # probe period
+    timeout = "5s"                  # slower than this counts as failed
+    grace_period = "30s"            # no database, so it starts fast
+    method = "GET"
+
+[[vm]]
+  size = "shared-cpu-1x"            # the smallest shared CPU
+  memory = "256mb"                  # in-memory state only; the simulator is tiny

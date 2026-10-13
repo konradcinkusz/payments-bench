@@ -1,0 +1,65 @@
+# payments-bench-api: the payment API (P7). Public, authenticated, on the synchronous path.
+#
+# Deployed by .github/workflows/deploy.yml with `flyctl deploy --image
+# ghcr.io/konradcinkusz/payments-bench-api:<tag>`; the image is built once per tag, never here.
+# The partner it calls is the SIMULATED bank (payments-bench-partner), not a real one. Nothing in
+# this estate talks to a real bank.
+#
+# Secrets (set by the pipeline, never in this file; names only, see docs/DEPLOYMENT.md):
+#   ConnectionStrings__payments   the `payments` database on payments-bench-postgres
+
+app = "payments-bench-api"        # globally unique across all of Fly: <system>-<service>
+primary_region = "fra"            # one region for the whole estate: same-region hops, one volume
+
+[build]
+  # Only used by a hand-run `flyctl deploy` without --image. Both paths resolve relative to THIS
+  # file: the Dockerfile copies from src/, so the context is the repository root.
+  dockerfile = "../src/PaymentsBench.Api/Dockerfile"
+  context = ".."
+
+# Everything in [env] is public (git diff, `fly config show`, image metadata). Secrets are not.
+[env]
+  # Production, never Development: Development means anonymous access (ADR 0004). Outside
+  # Development the API also refuses to start without Auth__Authority, which is the point.
+  ASPNETCORE_ENVIRONMENT = "Production"
+  ASPNETCORE_URLS = "http://+:8080"   # all interfaces; must equal internal_port below
+
+  # Token validation. The authority is authservice's PUBLIC https URL, not .internal/.flycast:
+  # RequireHttpsMetadata is on outside Development and the .internal/.flycast names are plain
+  # http with no certificate, so metadata would be refused; the public name has a real
+  # certificate and its proxy starts the machine if it were ever stopped. The API holds no key.
+  Auth__Authority = "https://payments-bench-authservice.fly.dev"
+  # Must equal authservice's Jwt__Issuer / Jwt__Audience (flyio/authservice.fly.toml). Product
+  # specific, so a token minted for another product on any authservice is refused here.
+  Auth__Issuer = "PaymentsBench"
+  Auth__Audience = "PaymentsBench"
+
+  # The SIMULATED partner bank, over the private 6PN network. `.internal` (not .flycast) because
+  # the partner pins a machine (min_machines_running = 1), so there is nothing for the proxy to
+  # wake, and .internal needs no private IP allocation. The partner has no public IP at all.
+  Partner__BaseAddress = "http://payments-bench-partner.internal:8080"
+
+[http_service]
+  internal_port = 8080              # must equal the port the process binds (ASPNETCORE_URLS)
+  force_https = true                # the proxy redirects http to https; bearer tokens never travel in clear
+  auto_stop_machines = "stop"       # the proxy may stop idle machines beyond the minimum
+  auto_start_machines = true        # and starts one on the next request
+  # 1, not 0: a client calls this API and waits while it calls the partner; the API's partner
+  # timeout (5 s) is far below a cold start plus first-boot migration. Synchronous path.
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 250                # the proxy queues past this
+    soft_limit = 200                # the proxy prefers another machine past this
+
+  [[http_service.checks]]
+    path = "/health"                # anonymous; runs every registered check, database included
+    interval = "30s"                # probe period
+    timeout = "5s"                  # a probe slower than this counts as failed
+    grace_period = "60s"            # first boot applies migrations after the listener is up
+    method = "GET"
+
+[[vm]]
+  size = "shared-cpu-1x"            # the smallest shared CPU; a bench, not a payment processor
+  memory = "512mb"
