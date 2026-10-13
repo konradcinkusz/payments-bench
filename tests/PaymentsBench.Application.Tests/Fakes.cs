@@ -18,6 +18,9 @@ public sealed class ScriptedPartner : IPartnerGateway
 
     public List<string> StatusQueries { get; } = [];
 
+    /// <summary>End-to-end ids whose status lookup throws, as a partner that is down for one transfer would.</summary>
+    public HashSet<string> ThrowOnStatusFor { get; } = [];
+
     public Task<SubmitResult> SubmitAsync(PartnerTransfer transfer, CancellationToken cancellationToken)
     {
         Submits.Add(transfer);
@@ -27,6 +30,11 @@ public sealed class ScriptedPartner : IPartnerGateway
     public Task<PartnerStatusResult> GetStatusAsync(string endToEndId, CancellationToken cancellationToken)
     {
         StatusQueries.Add(endToEndId);
+        if (ThrowOnStatusFor.Contains(endToEndId))
+        {
+            throw new InvalidOperationException($"Simulated partner failure for {endToEndId}.");
+        }
+
         return Task.FromResult(StatusAnswers.Count > 0 ? StatusAnswers.Dequeue() : new PartnerStatusResult(PartnerStatus.NotFound, null, null, null));
     }
 }

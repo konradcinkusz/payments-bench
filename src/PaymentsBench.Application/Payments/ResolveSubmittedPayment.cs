@@ -12,8 +12,25 @@ public enum ResolutionOutcome
     Accepted = 1,
     Settled = 2,
     Rejected = 3,
-    /// <summary>The partner has no record of the transfer, so the submit never landed. It is safe to resubmit.</summary>
+    /// <summary>
+    /// The partner had no record of the transfer. The resolver no longer returns this: it resubmits
+    /// itself, and a resubmit with no answer is <see cref="StillUnknown"/> (finding F-3).
+    /// </summary>
     SafeToResubmit = 4,
+
+    /// <summary>
+    /// The partner had no record, the resolver resubmitted with the same end-to-end id, and that
+    /// resubmit's own outcome is unknown. The transfer may now exist, so nothing is written, the
+    /// payment stays Submitted and the next resolve asks the partner again.
+    /// </summary>
+    StillUnknown = 5,
+
+    /// <summary>
+    /// The partner could not be asked (open circuit, timeout, transport failure), so nothing is known
+    /// and nothing is written. The payment stays Submitted and a later resolve or sweep asks again.
+    /// It is never treated as "no record": a resubmit here could duplicate the transfer.
+    /// </summary>
+    PartnerUnavailable = 6,
 }
 
 /// <summary>
@@ -59,10 +76,12 @@ public sealed class ResolveSubmittedPaymentHandler(
                 }
                 else
                 {
-                    return ResolutionOutcome.SafeToResubmit;
+                    return ResolutionOutcome.StillUnknown;
                 }
 
                 break;
+            case PartnerStatus.Unavailable:
+                return ResolutionOutcome.PartnerUnavailable;
             case PartnerStatus.Accepted:
                 payment.MarkAccepted(status.PartnerReference ?? payment.EndToEndId, now);
                 outcome = ResolutionOutcome.Accepted;
