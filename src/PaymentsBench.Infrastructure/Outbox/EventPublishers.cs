@@ -7,7 +7,7 @@ namespace PaymentsBench.Infrastructure.Outbox;
 /// What an implementation must honour: <see cref="PublishAsync"/> returns only once the
 /// destination holds the message (the dispatcher marks the row dispatched right after); the
 /// message id is the outbox row id and must reach the consumer unchanged; messages are offered
-/// in <c>OccurredAt</c> order, best effort. See ADR 0009.
+/// in <c>OccurredAt</c> order, best effort. See ADR 0010.
 /// </summary>
 public interface IEventPublisher
 {

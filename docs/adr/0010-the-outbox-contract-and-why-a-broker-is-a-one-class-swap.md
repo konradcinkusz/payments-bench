@@ -1,4 +1,4 @@
-# ADR 0009: The outbox contract, and why a broker is a one-class swap
+# ADR 0010: The outbox contract, and why a broker is a one-class swap
 
 **Status:** accepted, 2026-10-13
 
