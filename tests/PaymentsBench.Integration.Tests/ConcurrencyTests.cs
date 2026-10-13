@@ -15,7 +15,7 @@ namespace PaymentsBench.Integration.Tests;
 /// </summary>
 public sealed class ConcurrencyTests(MigratedPostgresFixture database) : IClassFixture<MigratedPostgresFixture>
 {
-    private static readonly ISchemeCatalog Schemes = SchemeCatalogLoader.Load(Path.Combine(AppContext.BaseDirectory, "scenarios"));
+    private static readonly ISchemeCatalog Schemes = SchemeCatalogLoader.Load(Path.Join(AppContext.BaseDirectory, "scenarios"));
 
     private readonly FixedClock _clock = new(Samples.Start);
 
@@ -180,14 +180,15 @@ public sealed class ConcurrencyTests(MigratedPostgresFixture database) : IClassF
         await handler.HandleAsync(command, CancellationToken.None);
     }
 
-    private static async Task<Exception?> Settle(Task task)
+    /// <summary>Null when the writer committed, the conflict when it lost; any other failure propagates and fails the test.</summary>
+    private static async Task<ConcurrencyConflictException?> Settle(Task task)
     {
         try
         {
             await task;
             return null;
         }
-        catch (Exception e)
+        catch (ConcurrencyConflictException e)
         {
             return e;
         }
