@@ -42,7 +42,7 @@ before every merge, never revert their lines); `package.json` for documentation 
 | C4 | PDF track: `docs/papers/house-preamble.tex`, `docs/papers/payments-bench-overview.tex`, `scripts/check-papers.mjs` in the lint job, `.github/workflows/build-overview-pdf.yml` (dispatch, PRs on `docs/papers/**` or `docs/diagrams/**` as artifact, `v*` tags as release asset); compiled locally before merge | `claude/stream-c/pdf` | lead | C2, C3 | #15 (merged) |
 | C5 | Site: `scripts/site-build.mjs` (Node stdlib only, `--check`), `docs/site/source.html`, `docs/site/status.json`, generated `docs/index.html` with hand-drawn inline SVG, `site:check` in the lint job | `claude/stream-c/site` | sub-session | C1 | #12 (merged) |
 | C6 | Publishing and front door: `.github/workflows/deploy-pages.yml`, `docs/DEPLOYMENT-DOCS.md` (the one manual Pages step), `README.md` restructured on agent-eval-bench's headings, ADRs for this stream's decisions at the next free numbers | `claude/stream-c/publish` | sub-session | C3, C4, C5 | #16 (merged) |
-| C7 | Final consistency pass after A and B report done: numbers in OVERVIEW, README, site and PDF equal what `main` measures; register closed rows match; PDF and site rebuilt | `claude/stream-c/final` | lead | A, B, C1-C6 | |
+| C7 | Final consistency pass after A and B report done: numbers in OVERVIEW, README, site and PDF equal what `main` measures; register closed rows match; PDF and site rebuilt | `claude/stream-c/final` | lead | A, B, C1-C6 | #35 (this pass) |
 
 C2, C3 and C5 run in parallel once C1 has merged. The overview and its LaTeX edition carry the
 argument and are written by the lead, not delegated.
