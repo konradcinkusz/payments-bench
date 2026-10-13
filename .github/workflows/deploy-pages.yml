@@ -1,0 +1,52 @@
+name: deploy-pages
+
+# Publishes docs/ to GitHub Pages.
+#
+# Why docs/ is uploaded as it is: the site is generated and committed. docs/index.html is
+# produced by `npm run site:build` and `npm run site:check` fails CI when it is stale, so what
+# is in docs/ on main is already what should be served and there is no build step to repeat
+# here. (Until the site slice is on main, docs/ has no index.html and a run publishes nothing
+# useful; see docs/DEPLOYMENT-DOCS.md.)
+#
+# Requires a one-time repository setting that no API can perform: Settings > Pages >
+# Build and deployment > Source: "GitHub Actions". Before that, the workflow fails (configure-pages
+# with "Get Pages site failed", then deploy with a "Pages not enabled" error) and there is nothing in this workflow to fix.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never cancel a running deployment: a half-published site is worse than a late one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Upload docs as the Pages artifact
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+  deploy:
+    name: Deploy to Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
