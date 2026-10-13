@@ -64,7 +64,7 @@ curl localhost:5100/payments/<id>/ledger
 
 ## Layout
 
-```
+```text
 src/PaymentsBench.Domain            Money, Payment + transitions, JournalEntry + Postings, SchemeRules
 src/PaymentsBench.Application       ports and handlers: initiate, submit, resolve, notify, reconcile
 src/PaymentsBench.Infrastructure    in-memory and EF Core/PostgreSQL stores, outbox dispatcher, HTTP partner gateway

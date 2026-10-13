@@ -14,26 +14,26 @@ Read against `00-REFERENCE-ARCHITECTURE.md` (P1-P15 and the compliance checklist
 1. **One slice, one branch, one PR.** Branches are `claude/stream-a/<slice>`. Every PR runs
    `dotnet build -warnaserror` and `dotnet test` before push, describes the decision and the
    principle it serves, and is reviewed against its acceptance criteria below before merge.
-2. **PostgreSQL in tests is resolved once, by a fixture.** If `PAYMENTSBENCH_TEST_POSTGRES` holds
+1. **PostgreSQL in tests is resolved once, by a fixture.** If `PAYMENTSBENCH_TEST_POSTGRES` holds
    a connection string, the fixture creates a fresh database per test class on that server;
    otherwise it starts a Testcontainers PostgreSQL. CI provides a PostgreSQL service container
    with `POSTGRES_HOST_AUTH_METHOD: trust`, so no credential is written into the tree. A missing
    database fails the test loudly; nothing is skipped (TESTING-STRATEGY.md §6).
-3. **The schema is migrated, never ensured** (P4), and every other hosted service waits on a
+1. **The schema is migrated, never ensured** (P4), and every other hosted service waits on a
    migration gate (SERVICE-API-PATTERNS.md §7).
-4. **Metric names follow stream B's dashboard**: `payments.submitted.oldest_age_seconds`
+1. **Metric names follow stream B's dashboard**: `payments.submitted.oldest_age_seconds`
    (observable gauge, seconds) and `payments.sweep.resolved` (counter, tag `outcome`), on the
    `PaymentsBench` meter.
-5. **`tests/PaymentsBench.Api.Tests` is created by slice A2.** Stream B's identity tests are
+1. **`tests/PaymentsBench.Api.Tests` is created by slice A2.** Stream B's identity tests are
    added to the same project when that slice lands; whichever PR lands second rebases.
-6. **API tests and the scenario runner run the API in the `Development` environment** with no
+1. **API tests and the scenario runner run the API in the `Development` environment** with no
    `Auth:Authority`, which stream B's plan defines as the anonymous development policy. If
    identity lands first, the runner keeps working without a token by that rule.
-7. **Shared files are edited minimally and every slice is brought up to date with `main` before
+1. **Shared files are edited minimally and every slice is brought up to date with `main` before
    merge**: `Program.cs`, `ci.yml`, `PaymentsBench.sln`, `Directory.Packages.props`,
    `docs/REGISTER.md`, `README.md` (Run section only). ADRs take the next free number on `main`
    at merge time.
-8. **Nothing here talks to a real bank.** Every partner in tests is the simulator, and the text
+1. **Nothing here talks to a real bank.** Every partner in tests is the simulator, and the text
    says "simulated" wherever a reader could assume otherwise.
 
 ## Order and waves
@@ -68,7 +68,7 @@ P13 (integration tier against a real container), SERVICE-API-PATTERNS.md §7 (mi
 | The migration applies to an empty database, leaves no pending migrations, and the model has no changes the migration does not carry (`HasPendingModelChanges`) | payments, persistence | P4 | reference architecture P4 | `tests/PaymentsBench.Integration.Tests/MigrationTests.cs` | none |
 | CI runs the integration tests against a PostgreSQL service container | CI | P12, P13 | TESTING-STRATEGY.md §3 | `.github/workflows/ci.yml` | none |
 
-Tests: the integration project above; existing 37 stay green. Register: R4 moves to *Closed*
+Tests: the integration project above; existing 37 stay green. Register: R4 moves to _Closed_
 citing the test classes and the CI job. ADR: schema migrated by a hosted service behind a gate.
 README Run section: how `dotnet test` finds a database.
 
@@ -100,7 +100,7 @@ registration), P8 (scheme data is required; malformed data stops start-up with t
 | Schemes and calendars are loaded at start-up into an `ISchemeCatalog`; the path comes from configuration; unknown scheme or a currency the scheme does not carry is refused at initiation with 422 | payments, infrastructure + application | P5, P8 | reference architecture P5, P8 | `Infrastructure/Schemes/*.cs`, `InitiatePayment.cs`, API project file (data copied to output) | none |
 | Tests on known closing days: TARGET2 Christmas 2026 and Good Friday/Easter Monday 2026 move the SEPA value date; the real data files load and every scheme resolves its calendar | payments, tests | P13 | TESTING-STRATEGY.md §6 | `tests/PaymentsBench.Domain.Tests/*`, `tests/PaymentsBench.Application.Tests/*` | none |
 
-Register: R7 moves to *Closed*. ADR: calendars as dated, covered data. A new row is opened if the
+Register: R7 moves to _Closed_. ADR: calendars as dated, covered data. A new row is opened if the
 computed value date is still not stamped on the payment.
 
 ### A4 - concurrency: one of two writers loses (R6) - PR: _pending_
@@ -115,7 +115,7 @@ crosses into Application or Api).
 | An integration test races two writers on one payment: exactly one commits, the other gets the conflict, and the loser's ledger and outbox rows are absent | payments, tests | P13 | TESTING-STRATEGY.md §6 | `tests/PaymentsBench.Integration.Tests/ConcurrencyTests.cs` | none |
 | An API test proves the 409 mapping | payments, tests | P13 | TESTING-STRATEGY.md §6 | `tests/PaymentsBench.Api.Tests/*` | none |
 
-Register: R6 moves to *Closed*.
+Register: R6 moves to _Closed_.
 
 ### A5 - sweeper: Submitted payments resolve themselves (R8) - PR: _pending_
 
@@ -130,7 +130,7 @@ SERVICE-API-PATTERNS.md §6-§7.
 | Metrics `payments.submitted.oldest_age_seconds` and `payments.sweep.resolved{outcome}`; the alert threshold is documented in the ADR | payments, observability | P15 | reference architecture P15 | sweeper, ADR | none |
 | Tests with a fixed clock: an old Submitted payment is resolved, a young one is not, NotFound resubmits once, a throwing resolve does not stop the batch, the metrics carry the expected values | payments, tests | P13 | TESTING-STRATEGY.md §6 | `tests/PaymentsBench.Application.Tests/*`, infrastructure tests | none |
 
-Register: R8 moves to *Closed*.
+Register: R8 moves to _Closed_.
 
 ### A6 - scenario-runner: every scenario file executes (R3) - PR: _pending_
 
@@ -145,7 +145,7 @@ are data; a new file is a new case with no code change).
 | Runs on in-memory storage always and on PostgreSQL (fresh database per scenario) when `PAYMENTSBENCH_TEST_POSTGRES` is set; CI runs both and gates on them | payments, tests + CI | P13 | TESTING-STRATEGY.md §3 | runner, `ci.yml` | none |
 | New scenario files for paths not yet specified: partner rejects, and a reconciliation break of a kind not yet covered | payments, data | architecture rule 7 | none | `scenarios/*.yaml`, `scenarios/README.md` | none |
 
-Register: R3 moves to *Closed*. ADR: the scenario runner runs in process.
+Register: R3 moves to _Closed_. ADR: the scenario runner runs in process.
 
 ### A7 - outbox-contract: at-least-once, deduped by the consumer (R5, narrowed) - PR: _pending_
 
@@ -171,7 +171,7 @@ Principle: P11 (external dialects are normalized at the boundary, once).
 | A `camt.053`-shaped statement is read into `Statement`; `HttpStatementSource` accepts it when the simulated partner serves XML | payments, anti-corruption edge | P11 | reference architecture P11 | `src/PaymentsBench.Iso20022/*`, `Partner/HttpStatementSource.cs`, simulator | none |
 | Writers for both shapes and round-trip tests on sample documents committed under `tests/PaymentsBench.Iso20022.Tests/samples/` | payments, tests | P13 | TESTING-STRATEGY.md §6 | test project and samples | none |
 
-Register: R2 moves to *Closed* if the closing condition is met as written; a new row records
+Register: R2 moves to _Closed_ if the closing condition is met as written; a new row records
 that the samples are hand-written in the published shape and are not validated against the
 official schemas.
 

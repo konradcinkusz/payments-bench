@@ -51,9 +51,9 @@ argument and are written by the lead, not delegated.
 
 1. The overview PDF is built on demand, on pull requests that touch its sources, and on `v*`
    tags as a release asset; never committed.
-2. The site is generated from one source and one facts file by a dependency-free script whose
+1. The site is generated from one source and one facts file by a dependency-free script whose
    `--check` mode fails CI when the committed page is stale; it is not hand-maintained.
-3. The site loads no external resource and carries a Content-Security-Policy that allows
+1. The site loads no external resource and carries a Content-Security-Policy that allows
    nothing but its own inline style by hash.
 
 ## Findings
@@ -68,6 +68,11 @@ the evidence, and stream C will write it up.
 - F-2: the resilience pipeline's `TimeoutRejectedException` escaped the gateway's catch and
   turned a timeout-after-accept into a 500 instead of an Unknown outcome; committed-before-call
   still let the resolver recover without a duplicate. Found by the HTTP walk-through.
+- F-3, F-4, F-5 (open, found while writing `docs/OVERVIEW.md`; the fixes are in the core, so they
+  are offered to stream A): the resolver returns `SafeToResubmit` after a resubmit whose outcome is
+  unknown; a payment settled and later returned is an `OnStatementOnly` break for its settlement
+  day; the partner client's retry predicate never matches an exception, so a `GET` that times out
+  is not retried. Evidence for each is in `docs/FINDINGS.md`.
 
 ## Done means
 
