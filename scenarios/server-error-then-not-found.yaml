@@ -1,0 +1,22 @@
+id: server-error-then-not-found
+class: partner-failure
+description: >
+  The partner answers 503 before recording anything. The resolver finds no record and only then
+  resubmits, with the same end-to-end id.
+partner:
+  fault: server-error
+steps:
+  - initiate:
+      idempotencyKey: err-1
+      endToEndId: E2E-ERR-1
+      amount: 75.00
+      currency: EUR
+      scheme: sepa
+  - submit: E2E-ERR-1
+  - assertStatus: Submitted
+  - partnerFault: none
+  - resolve: E2E-ERR-1
+expect:
+  status: Accepted
+  partnerSubmits: 2
+  partnerStatusQueries: 1

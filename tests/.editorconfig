@@ -1,0 +1,3 @@
+# Test names read as sentences; underscores are the convention here.
+[*.cs]
+dotnet_diagnostic.CA1707.severity = none

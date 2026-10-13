@@ -1,0 +1,26 @@
+id: duplicate-notification
+class: duplicate
+description: The same settlement notification delivered twice settles the payment once and posts the ledger once.
+partner:
+  fault: none
+steps:
+  - initiate:
+      idempotencyKey: dup-1
+      endToEndId: E2E-DUP-1
+      amount: 20.00
+      currency: EUR
+      scheme: sepa
+  - submit: E2E-DUP-1
+  - notify:
+      notificationId: N-DUP-1
+      endToEndId: E2E-DUP-1
+      kind: Settled
+  - notify:
+      notificationId: N-DUP-1
+      endToEndId: E2E-DUP-1
+      kind: Settled
+expect:
+  status: Settled
+  ledgerEntries: 2
+  ledger:
+    nostro: -20.00

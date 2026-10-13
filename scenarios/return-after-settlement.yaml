@@ -1,0 +1,28 @@
+id: return-after-settlement
+class: happy
+description: A settled transfer is returned by the receiving bank. The customer gets the funds back and nostro nets to zero.
+partner:
+  fault: none
+steps:
+  - initiate:
+      idempotencyKey: ret-1
+      endToEndId: E2E-RET-1
+      amount: 30.00
+      currency: EUR
+      scheme: sepa
+  - submit: E2E-RET-1
+  - notify:
+      notificationId: N-RET-1
+      endToEndId: E2E-RET-1
+      kind: Settled
+  - notify:
+      notificationId: N-RET-2
+      endToEndId: E2E-RET-1
+      kind: Returned
+      reasonCode: AC04
+expect:
+  status: Returned
+  ledger:
+    customer-funds: 0.00
+    pending-outbound: 0.00
+    nostro: 0.00

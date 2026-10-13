@@ -1,1 +1,85 @@
 # payments-bench
+
+An outbound bank-transfer service, built to show the mechanisms a payment rail needs in order to
+move money exactly once and to recover when the partner on the other end misbehaves. It is a
+bench, not a product: the bank is simulated, the schemes are data, and a register at
+[`docs/REGISTER.md`](docs/REGISTER.md) says what has and has not been proven.
+
+## What it does
+
+| Mechanism | Where | Why it exists |
+|---|---|---|
+| Idempotent initiation | `InitiatePaymentHandler` | The same request twice is one payment; the same key with a different body is a `409`, not a second transfer. |
+| Payment state machine | `PaymentTransitions`, `Payment` | Six states, every allowed move in one table, a reason code on every failure, terminal states that accept nothing. |
+| Submit without blind retry | `SubmitPaymentHandler`, `HttpPartnerGateway` | A timeout after the body went out is an **unknown** outcome. Nothing retries it; the resolver asks the partner by end-to-end id and resubmits only when the partner has no record. |
+| Transactional outbox / inbox | `IOutbox`, `IInbox`, `OutboxDispatcher` | Events leave in the same commit as the state change; partner notifications are deduplicated by id because delivery is at least once. |
+| Double-entry ledger | `JournalEntry`, `Postings` | Append-only, balanced per currency, balances derived. Customer funds move `customer-funds → pending-outbound → nostro`, and a return brings them back. |
+| Reconciliation | `ReconciliationService` | One day's statement against the settled payments: matches, and three named kinds of break as a work queue, not an alert. |
+| Scheme rules as data | `scenarios/schemes.yaml`, `ValueDateCalculator` | Cut-off time and settlement days per scheme; the value date is computed, not guessed. |
+| Partner simulator with faults | `PaymentsBench.PartnerSimulator` | Latency, timeout after accept, 503, reject-all, statement drift: switched at runtime with `PUT /faults`. |
+| Degraded storage | `InfrastructureRegistration` | No connection string: the service runs in memory and says so in the log, instead of refusing to start. |
+
+Observability: one OpenTelemetry trace per request, a `payments.transitions` counter tagged by
+status, `/health` and `/alive`, OTLP export when `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
+
+## Run it
+
+```bash
+dotnet test                                   # 37 tests, no database needed
+dotnet run --project src/PaymentsBench.AppHost   # Aspire: PostgreSQL + simulator + API + dashboard
+```
+
+Or without Aspire, in memory, two terminals:
+
+```bash
+dotnet run --project src/PaymentsBench.PartnerSimulator   # http://localhost:5101
+dotnet run --project src/PaymentsBench.Api                # http://localhost:5100
+```
+
+Then walk a transfer through its life:
+
+```bash
+# initiate (the Idempotency-Key header is required)
+curl -X POST localhost:5100/payments -H 'Content-Type: application/json' -H 'Idempotency-Key: demo-1' \
+  -d '{"endToEndId":"E2E-1","amount":100.00,"currency":"EUR","debtorAccount":"DE89...","creditorAccount":"GB33...","scheme":"sepa"}'
+curl -X POST localhost:5100/payments/<id>/submit
+# make the partner time out after accepting, then watch the resolver recover without a duplicate
+curl -X PUT localhost:5101/faults -H 'Content-Type: application/json' -d '{"kind":"TimeoutAfterAccept","delayMilliseconds":8000}'
+curl -X POST localhost:5100/payments/<id>/submit      # -> Submitted (outcome unknown)
+curl -X PUT localhost:5101/faults -H 'Content-Type: application/json' -d '{"kind":"None"}'
+curl -X POST localhost:5100/payments/<id>/resolve     # -> {"outcome":"Accepted"}, one transfer at the partner
+# settle, notify (twice: the second is a Duplicate), reconcile, read the ledger
+curl -X POST 'localhost:5101/transfers/E2E-1/settle?valueDate=2026-10-14'
+curl -X POST localhost:5100/partner/notifications -H 'Content-Type: application/json' \
+  -d '{"notificationId":"N-1","endToEndId":"E2E-1","kind":"Settled","valueDate":"2026-10-14"}'
+curl -X POST localhost:5100/reconciliation/runs/2026-10-14
+curl localhost:5100/payments/<id>/ledger
+```
+
+## Layout
+
+```
+src/PaymentsBench.Domain            Money, Payment + transitions, JournalEntry + Postings, SchemeRules
+src/PaymentsBench.Application       ports and handlers: initiate, submit, resolve, notify, reconcile
+src/PaymentsBench.Infrastructure    in-memory and EF Core/PostgreSQL stores, outbox dispatcher, HTTP partner gateway
+src/PaymentsBench.Api               the HTTP surface; Program.cs is the manifest
+src/PaymentsBench.PartnerSimulator  a bank that misbehaves on request
+src/PaymentsBench.ServiceDefaults   OpenTelemetry, health, service discovery (no domain types)
+src/PaymentsBench.AppHost           Aspire composition root
+tests/                              domain and application tests on the in-memory stores
+scenarios/                          the fault scenarios as data, and the scheme rules
+docs/                               architecture, the register, decision records
+```
+
+## How it was built
+
+Specification first: the state machine, the ledger postings, the unknown-outcome rule and the
+scenario files in `scenarios/` were written before the handlers. The implementation was then
+generated with an AI coding agent against that specification and accepted only where the tests
+in `tests/` and the HTTP walk-through above proved it did what the specification said. The
+[register](docs/REGISTER.md) lists what that process has not yet proved, with dates, so that a
+reader does not have to guess.
+
+## License
+
+MIT.

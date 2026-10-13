@@ -1,0 +1,21 @@
+id: timeout-after-accept
+class: partner-failure
+description: >
+  The partner accepts the transfer but the response never arrives. The payment must stay
+  Submitted, the resolver must ask the partner, and no second transfer may be created.
+partner:
+  fault: timeout-after-accept
+steps:
+  - initiate:
+      idempotencyKey: timeout-1
+      endToEndId: E2E-TIMEOUT-1
+      amount: 50.00
+      currency: EUR
+      scheme: sepa
+  - submit: E2E-TIMEOUT-1
+  - assertStatus: Submitted
+  - resolve: E2E-TIMEOUT-1
+expect:
+  status: Accepted
+  partnerSubmits: 1
+  partnerStatusQueries: 1

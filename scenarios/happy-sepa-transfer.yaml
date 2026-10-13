@@ -1,0 +1,28 @@
+id: happy-sepa-transfer
+class: happy
+description: One SEPA transfer, accepted, settled next business day, booked on the statement.
+partner:
+  fault: none
+steps:
+  - initiate:
+      idempotencyKey: happy-1
+      endToEndId: E2E-HAPPY-1
+      amount: 100.00
+      currency: EUR
+      scheme: sepa
+  - submit: E2E-HAPPY-1
+  - partnerSettles:
+      endToEndId: E2E-HAPPY-1
+      valueDate: next-business-day
+  - notify:
+      notificationId: N-HAPPY-1
+      endToEndId: E2E-HAPPY-1
+      kind: Settled
+  - reconcile: value-date
+expect:
+  status: Settled
+  ledger:
+    pending-outbound: 0.00
+    nostro: -100.00
+  reconciliation:
+    breaks: 0

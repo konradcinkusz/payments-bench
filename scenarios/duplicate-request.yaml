@@ -1,0 +1,28 @@
+id: duplicate-request
+class: duplicate
+description: The same initiate request twice with one idempotency key creates one payment; a different body under the same key is refused.
+partner:
+  fault: none
+steps:
+  - initiate:
+      idempotencyKey: dupreq-1
+      endToEndId: E2E-DUPREQ-1
+      amount: 10.00
+      currency: EUR
+      scheme: sepa
+  - initiate:
+      idempotencyKey: dupreq-1
+      endToEndId: E2E-DUPREQ-1
+      amount: 10.00
+      currency: EUR
+      scheme: sepa
+  - initiateExpectingConflict:
+      idempotencyKey: dupreq-1
+      endToEndId: E2E-DUPREQ-1
+      amount: 11.00
+      currency: EUR
+      scheme: sepa
+expect:
+  status: Initiated
+  payments: 1
+  ledgerEntries: 1

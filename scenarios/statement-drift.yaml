@@ -1,0 +1,27 @@
+id: statement-drift
+class: reconciliation
+description: The statement books one cent more than the ledger settled. Reconciliation reports an amount mismatch for that id and nothing else.
+partner:
+  fault: statement-drift
+  driftAmount: 0.01
+steps:
+  - initiate:
+      idempotencyKey: drift-1
+      endToEndId: E2E-DRIFT-1
+      amount: 100.00
+      currency: EUR
+      scheme: sepa
+  - submit: E2E-DRIFT-1
+  - partnerSettles:
+      endToEndId: E2E-DRIFT-1
+      valueDate: next-business-day
+  - notify:
+      notificationId: N-DRIFT-1
+      endToEndId: E2E-DRIFT-1
+      kind: Settled
+  - reconcile: value-date
+expect:
+  status: Settled
+  reconciliation:
+    breaks: 1
+    kinds: [AmountMismatch]
