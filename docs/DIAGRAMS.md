@@ -10,6 +10,8 @@ Each diagram exists twice, byte-identical: inline here (the form GitHub renders)
 (`### A1.` owns `a1-*.mmd`), and `npm run lint:diagrams` ([`scripts/check-diagrams.mjs`](../scripts/check-diagrams.mjs))
 fails when they differ.
 
+## The diagrams
+
 ### A1. Money path
 
 Where customer money sits and which payment event moves it: reserve on initiation, release on rejection, settle to the nostro, reverse on return. The accounts are `LedgerAccounts` and the movements are the four entries in `Postings` (`src/PaymentsBench.Domain/Ledger/Postings.cs`).
