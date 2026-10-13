@@ -1,21 +1,36 @@
 flowchart TB
     subgraph APPHOST["PaymentsBench.AppHost (Aspire composition root)"]
-        PG[("postgres<br/>AddPostgres with data volume<br/>database: payments")]
+        PG[("postgres<br/>AddPostgres with data volume<br/>databases: payments, authdb")]
         PART["partner<br/>PaymentsBench.PartnerSimulator<br/>partner simulator (simulated bank)"]
         API["api<br/>PaymentsBench.Api<br/>Partner__BaseAddress=http://partner"]
+        AUTH["authservice (container, pinned tag)<br/>declared only when Parameters:auth-signing-key is set<br/>otherwise the api runs its Development policy, anonymous allowed"]
         DASH["Aspire dashboard<br/>traces, metrics, logs over OTLP"]
     end
 
     API -- "ConnectionStrings:payments<br/>WithReference, WaitFor" --> PG
     API -- "HTTP: /transfers, /statements<br/>WithReference, WaitFor" --> PART
+    API -- "Auth__Authority: JWKS, JwtBearer<br/>WaitFor" --> AUTH
+    AUTH -- "ConnectionStrings:authdb<br/>WaitFor" --> PG
     API -. "OTLP" .-> DASH
     PART -. "OTLP" .-> DASH
     CLI["client, curl"] --> API
     CLI -- "PUT /faults, settle, return" --> PART
 
+    subgraph FLY["Fly.io, region fra, flyio/*.fly.toml: declared, never deployed (register R14)"]
+        direction TB
+        FAPI["payments-bench-api<br/>flyio/api.fly.toml, public, force_https<br/>health check GET /health<br/>Partner__BaseAddress=http://payments-bench-partner.internal:8080"]
+        FAUTH["payments-bench-authservice<br/>flyio/authservice.fly.toml, public<br/>health check GET /health/ready"]
+        FPART["payments-bench-partner<br/>flyio/partner.fly.toml<br/>partner simulator (simulated bank), in-memory state<br/>reached over .internal; no public address expected (R26)"]
+        FPG[("payments-bench-postgres<br/>flyio/postgres.fly.toml<br/>postgres:17-alpine, volume pgdata<br/>databases: payments, authservice")]
+        FAPI -- "Auth__Authority https" --> FAUTH
+        FAPI -- "6PN, .internal" --> FPART
+        FAPI -- "payments database" --> FPG
+        FAUTH -- "authservice database" --> FPG
+    end
+
     subgraph DEG["Degraded mode: no payments connection string"]
         direction TB
-        APID["api, run alone with dotnet run<br/>in-memory repository, ledger, outbox, inbox<br/>no migration, no OutboxDispatcher<br/>warning in the log at start-up"]
+        APID["api, run alone with dotnet run<br/>in-memory repository, ledger, outbox, inbox<br/>no migration, no OutboxDispatcher<br/>SubmittedPaymentSweeper still runs (MigrationGate.Completed)<br/>warning in the log at start-up"]
         PARTD["partner simulator (simulated bank)<br/>dotnet run, port 5101"]
         APID -- "HTTP, port 5100 to 5101" --> PARTD
     end
