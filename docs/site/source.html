@@ -1,0 +1,290 @@
+<section class="panel" id="overview" data-tab="Overview">
+<p class="eyebrow">payments-bench · outbound bank transfers · simulated partner</p>
+<h1>Move money exactly once, and say what is not yet proved.</h1>
+<p class="lede">payments-bench is an outbound bank-transfer service built to show the mechanisms a payment rail needs when the bank on the other end misbehaves: idempotent initiation, a state machine with one table of allowed moves, an unknown-outcome rule that never retries blind, a double-entry ledger, and reconciliation that produces a work queue. It is a bench, not a product.</p>
+<p class="note"><strong>The partner bank is simulated.</strong> Nothing in this repository has talked to a real bank. The partner is <code>src/PaymentsBench.PartnerSimulator</code>, and its API shape is invented (register row R1, below).</p>
+
+<div class="stat-row">
+<div class="stat"><span class="big-num">{{tests-total}}</span><p>tests, no database needed</p><span class="src">{{fact:tests.domain}} in {{src:tests.domain}} + {{fact:tests.application}} in {{src:tests.application}} · as of {{asof:tests.domain}}</span></div>
+<div class="stat"><span class="big-num">6</span><p>payment states, every allowed move in one table</p><span class="src">src/PaymentsBench.Domain/Payments/PaymentTransitions.cs</span></div>
+<div class="stat"><span class="big-num">3</span><p>ledger accounts</p><span class="src">src/PaymentsBench.Domain/Ledger/LedgerAccounts.cs</span></div>
+<div class="stat"><span class="big-num">{{count:scenarios}}</span><p>fault scenarios, as data</p><span class="src">scenarios/*.yaml</span></div>
+<div class="stat"><span class="big-num">{{count:register-open}}</span><p>open rows in the register of what is not proved</p><span class="src">docs/REGISTER.md</span></div>
+<div class="stat"><span class="big-num">{{count:adrs}}</span><p>decision records</p><span class="src">docs/adr/</span></div>
+</div>
+
+<div class="cards cards-3">
+<article class="card"><h3>Exactly once</h3><p>The same request twice is one payment; the same key with a different body is a <code>409</code>, not a second transfer. Submitted is committed before the partner call, so a crash leaves evidence.</p><span class="src">README.md · InitiatePaymentHandler</span></article>
+<article class="card"><h3>Honest about the unknown</h3><p>A timeout after the body went out is an unknown outcome. Nothing retries it; the resolver asks the partner by end-to-end id and resubmits only when the partner has no record.</p><span class="src">docs/adr/0001-no-blind-resubmit.md</span></article>
+<article class="card"><h3>Rules as data</h3><p>Cut-off time and settlement days per scheme, and every fault scenario, are files under <code>scenarios/</code>, never branches in code.</p><span class="src">scenarios/schemes.yaml</span></article>
+</div>
+
+<h3>Merged on main, as of {{asof:mergedPullRequests}}</h3>
+{{merged-prs}}
+<p>{{cite:mergedPullRequests}}</p>
+<p class="muted">This list is a snapshot from <code>docs/site/status.json</code> and goes stale with every merge. This page describes only what is on <code>main</code>.</p>
+</section>
+
+<section class="panel" id="money-path" data-tab="The money path">
+<p class="eyebrow">double-entry ledger</p>
+<h2>The money path</h2>
+<p class="lede">Customer funds sit in <code>customer-funds</code> until a transfer is initiated, in <code>pending-outbound</code> while it is in flight, and leave through <code>nostro</code> only when the partner says it settled. Every movement is a balanced, append-only journal entry; balances are sums, never columns.</p>
+
+<figure class="fig"><div class="fig-scroll" tabindex="0"><svg class="dg" viewBox="0 0 1000 385" role="img" aria-label="Three ledger accounts: customer-funds, pending-outbound and nostro. Reserve moves funds from customer-funds to pending-outbound; Settle moves them on to nostro; Release returns them from pending-outbound to customer-funds on rejection; Reverse returns them from nostro to customer-funds on a return.">
+<defs>
+<marker id="mp-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="mk-a" d="M0,0 L10,5 L0,10 z"/></marker>
+<marker id="mp-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="mk-ok" d="M0,0 L10,5 L0,10 z"/></marker>
+<marker id="mp-x" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="mk-x" d="M0,0 L10,5 L0,10 z"/></marker>
+</defs>
+<text class="hdr" x="40" y="34">ledger accounts</text>
+<rect class="b-n" x="40" y="55" width="180" height="75" rx="8"/>
+<text class="t mono sm c" x="130" y="88">customer-funds</text>
+<text class="s c" x="130" y="108">safeguarded money</text>
+<rect class="b-h" x="410" y="55" width="180" height="75" rx="8"/>
+<text class="t mono sm c" x="500" y="88">pending-outbound</text>
+<text class="s c" x="500" y="108">in flight</text>
+<rect class="b-ok" x="780" y="55" width="180" height="75" rx="8"/>
+<text class="t mono sm c" x="870" y="88">nostro</text>
+<text class="s c" x="870" y="108">left through the partner</text>
+
+<path class="w w-a" d="M220,92 L408,92" marker-end="url(#mp-a)"/>
+<text class="lbl c" x="315" y="80">Reserve · on Initiated</text>
+<text class="s c" x="315" y="112">Dr customer-funds</text>
+<text class="s c" x="315" y="128">Cr pending-outbound</text>
+
+<path class="w w-ok" d="M590,92 L778,92" marker-end="url(#mp-ok)"/>
+<text class="lbl c" x="685" y="80">Settle · on Settled</text>
+<text class="s c" x="685" y="112">Dr pending-outbound</text>
+<text class="s c" x="685" y="128">Cr nostro</text>
+
+<path class="w w-x" d="M500,132 C500,230 200,230 200,134" marker-end="url(#mp-x)"/>
+<text class="lbl c" x="360" y="230">Release · on Rejected</text>
+<text class="s c" x="360" y="247">Dr pending-outbound</text>
+<text class="s c" x="360" y="263">Cr customer-funds</text>
+
+<path class="w w-x" d="M880,132 C880,380 100,380 100,134" marker-end="url(#mp-x)"/>
+<text class="lbl c" x="490" y="338">Reverse · on Returned</text>
+<text class="s c" x="490" y="355">Dr nostro · Cr customer-funds</text>
+</svg></div>
+<figcaption>The four journal entries, as written in <code>Postings.Reserve</code>, <code>Settle</code>, <code>Release</code> and <code>Reverse</code>. Green is a settled outcome, red a rejected or returned one, amber money still in flight. A returned payment nets every account to zero (ADR 0002). Source: src/PaymentsBench.Domain/Ledger/Postings.cs.</figcaption></figure>
+
+<div class="tbl-wrap"><table class="tbl">
+<thead><tr><th scope="col">Event</th><th scope="col">Payment status</th><th scope="col">Ledger</th><th scope="col">Outbox</th></tr></thead>
+<tbody>
+<tr><th scope="row"><code>POST /payments</code></th><td><span class="chip">Initiated</span></td><td>customer-funds → pending-outbound</td><td><code>PaymentInitiated</code></td></tr>
+<tr><th scope="row"><code>POST /payments/{id}/submit</code></th><td><span class="chip chip-pending">Submitted</span> then <span class="chip chip-pending">Accepted</span> or <span class="chip chip-failed">Rejected</span></td><td>on rejection: pending-outbound → customer-funds</td><td><code>PaymentSubmitted</code>, then <code>PaymentAccepted</code> or <code>PaymentRejected</code></td></tr>
+<tr><th scope="row">partner notification: settled</th><td><span class="chip chip-settled">Settled</span></td><td>pending-outbound → nostro</td><td><code>PaymentSettled</code></td></tr>
+<tr><th scope="row">partner notification: rejected</th><td><span class="chip chip-failed">Rejected</span></td><td>pending-outbound → customer-funds</td><td><code>PaymentRejected</code></td></tr>
+<tr><th scope="row">partner notification: returned</th><td><span class="chip chip-failed">Returned</span></td><td>nostro → customer-funds</td><td><code>PaymentReturned</code></td></tr>
+</tbody></table></div>
+<p class="src">docs/ARCHITECTURE.md · “A payment’s life”</p>
+</section>
+
+<section class="panel" id="mechanisms" data-tab="The mechanisms">
+<p class="eyebrow">state machine · unknown outcome · outbox and inbox</p>
+<h2>The mechanisms</h2>
+<p class="lede">Four pictures, drawn from the names in the code. Each one is a rule the architecture states and a test exercises.</p>
+
+<h3>One table of allowed moves</h3>
+<figure class="fig"><div class="fig-scroll" tabindex="0"><svg class="dg" viewBox="0 0 1000 420" role="img" aria-label="Payment state machine. Initiated moves to Submitted. Submitted moves to Accepted, Settled or Rejected. Accepted moves to Settled or Rejected. Settled moves to Returned. Rejected and Returned are terminal.">
+<defs>
+<marker id="sm-n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="mk-n" d="M0,0 L10,5 L0,10 z"/></marker>
+<marker id="sm-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="mk-ok" d="M0,0 L10,5 L0,10 z"/></marker>
+<marker id="sm-x" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="mk-x" d="M0,0 L10,5 L0,10 z"/></marker>
+<marker id="sm-h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="mk-h" d="M0,0 L10,5 L0,10 z"/></marker>
+</defs>
+<rect class="b-n" x="20" y="190" width="120" height="50" rx="8"/><text class="t mono sm c" x="80" y="220">Initiated</text>
+<rect class="b-h" x="230" y="190" width="120" height="50" rx="8"/><text class="t mono sm c" x="290" y="220">Submitted</text>
+<rect class="b-h" x="440" y="190" width="120" height="50" rx="8"/><text class="t mono sm c" x="500" y="220">Accepted</text>
+<rect class="b-ok" x="650" y="190" width="120" height="50" rx="8"/><text class="t mono sm c" x="710" y="220">Settled</text>
+<rect class="b-x term" x="860" y="190" width="120" height="50" rx="8"/><text class="t mono sm c" x="920" y="220">Returned</text>
+<rect class="b-x term" x="440" y="320" width="120" height="50" rx="8"/><text class="t mono sm c" x="500" y="350">Rejected</text>
+
+<path class="w" d="M140,215 L228,215" marker-end="url(#sm-n)"/><text class="lbl c" x="185" y="180">MarkSubmitted</text>
+<path class="w w-h" d="M350,215 L438,215" marker-end="url(#sm-h)"/><text class="lbl c" x="395" y="180">MarkAccepted</text>
+<path class="w w-ok" d="M560,215 L648,215" marker-end="url(#sm-ok)"/><text class="lbl c" x="605" y="180">MarkSettled</text>
+<path class="w w-x" d="M770,215 L858,215" marker-end="url(#sm-x)"/><text class="lbl c" x="815" y="180">MarkReturned</text>
+<path class="w w-ok" d="M290,188 C290,40 710,40 710,188" marker-end="url(#sm-ok)"/>
+<text class="lbl c" x="500" y="62">MarkSettled · the resolver or a notification finds it already settled</text>
+<path class="w w-x" d="M290,242 C290,345 340,345 438,345" marker-end="url(#sm-x)"/><text class="lbl c" x="372" y="365">MarkRejected</text>
+<path class="w w-x" d="M500,242 L500,318" marker-end="url(#sm-x)"/><text class="lbl" x="512" y="285">MarkRejected</text>
+
+<text class="hdr c" x="500" y="394">terminal</text>
+<text class="hdr c" x="920" y="262">terminal</text>
+<text class="hdr c" x="80" y="262">start</text>
+<rect class="b-z" x="20" y="300" width="215" height="80" rx="8"/>
+<text class="t sm" x="34" y="326">Unknown outcome</text>
+<text class="s" x="34" y="345">No transition is made: the</text>
+<text class="s" x="34" y="361">payment stays Submitted.</text>
+</svg></div>
+<figcaption>Every allowed move, exactly as enumerated in <code>PaymentTransitions</code>; the aggregate consults the table before each move and a failure carries a reason code. <code>Rejected</code> and <code>Returned</code> accept nothing further. Source: src/PaymentsBench.Domain/Payments/PaymentTransitions.cs.</figcaption></figure>
+
+<h3>Submit, unknown, resolve</h3>
+<figure class="fig"><div class="fig-scroll" tabindex="0"><svg class="dg" viewBox="0 0 1000 790" role="img" aria-label="Sequence. SubmitPaymentHandler commits Submitted to the store, then calls HttpPartnerGateway, which posts to the simulated partner. The partner records the transfer but the response is lost, so the gateway returns SubmitOutcome.Unknown and the payment stays Submitted. Later ResolveSubmittedPaymentHandler asks the gateway for the status by end-to-end id; the partner answers with a PartnerStatus. Only NotFound allows a resubmit, with the same end-to-end id.">
+<defs>
+<marker id="sq-n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="mk-n" d="M0,0 L10,5 L0,10 z"/></marker>
+<marker id="sq-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="mk-a" d="M0,0 L10,5 L0,10 z"/></marker>
+<marker id="sq-h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="mk-h" d="M0,0 L10,5 L0,10 z"/></marker>
+</defs>
+<path class="life" d="M100,66 L100,770"/><path class="life" d="M300,66 L300,770"/><path class="life" d="M500,66 L500,770"/><path class="life" d="M700,66 L700,770"/><path class="life" d="M900,66 L900,770"/>
+<rect class="b-a" x="10" y="16" width="180" height="50" rx="8"/><text class="t mono sm c" x="100" y="46">SubmitPaymentHandler</text>
+<rect class="b-n" x="210" y="16" width="180" height="50" rx="8"/><text class="t mono sm c" x="300" y="46">Store (IUnitOfWork)</text>
+<rect class="b-n" x="410" y="16" width="180" height="50" rx="8"/><text class="t mono sm c" x="500" y="46">HttpPartnerGateway</text>
+<rect class="b-z" x="610" y="16" width="180" height="50" rx="8"/><text class="t mono sm c" x="700" y="46">Partner (simulated)</text>
+<rect class="b-a" x="810" y="16" width="180" height="50" rx="8"/><text class="t mono sm c" x="900" y="37">ResolveSubmitted</text><text class="t mono sm c" x="900" y="55">PaymentHandler</text>
+
+<path class="w w-a" d="M100,108 L298,108" marker-end="url(#sq-a)"/>
+<text class="lbl c" x="200" y="101">MarkSubmitted, CommitAsync</text>
+<text class="s c" x="200" y="128">Submitted is committed first</text>
+
+<path class="w" d="M100,170 L498,170" marker-end="url(#sq-n)"/>
+<text class="lbl c" x="300" y="163">SubmitAsync(transfer)</text>
+<path class="w" d="M500,215 L698,215" marker-end="url(#sq-n)"/>
+<text class="lbl c" x="600" y="208">POST transfer (end-to-end id)</text>
+<rect class="b-ok" x="610" y="236" width="180" height="34" rx="6"/>
+<text class="s c" x="700" y="258">accepts and records it</text>
+
+<path class="w w-x dash" d="M698,305 L596,305"/>
+<path class="w w-x" d="M580,297 L596,313 M596,297 L580,313"/>
+<text class="lbl c" x="640" y="297">response never arrives</text>
+
+<path class="w w-h dash" d="M498,352 L102,352" marker-end="url(#sq-h)"/>
+<text class="lbl c" x="300" y="345">SubmitOutcome.Unknown</text>
+<rect class="b-h" x="10" y="372" width="285" height="34" rx="6"/>
+<text class="s" x="22" y="394">payment stays Submitted. No retry.</text>
+
+<line class="b-z" x1="10" y1="440" x2="990" y2="440"/>
+<text class="lbl c" x="500" y="445">later: POST /payments/{id}/resolve</text>
+
+<path class="w w-a" d="M900,490 L502,490" marker-end="url(#sq-a)"/>
+<text class="lbl c" x="700" y="483">GetStatusAsync(endToEndId)</text>
+<path class="w" d="M500,530 L698,530" marker-end="url(#sq-n)"/>
+<text class="lbl c" x="600" y="523">ask by end-to-end id</text>
+<path class="w dash" d="M698,572 L502,572" marker-end="url(#sq-n)"/>
+<text class="lbl c" x="600" y="565">PartnerStatus</text>
+<text class="s c" x="600" y="590">Accepted · Settled · Rejected · NotFound</text>
+
+<text class="lbl" x="14" y="620">the partner has a record</text>
+<path class="w w-a" d="M900,645 L302,645" marker-end="url(#sq-a)"/>
+<text class="lbl c" x="600" y="638">MarkAccepted | MarkSettled | MarkRejected, ledger, CommitAsync</text>
+
+<text class="lbl" x="14" y="685">NotFound: no record, so resubmit once</text>
+<path class="w w-h" d="M900,710 L502,710" marker-end="url(#sq-h)"/>
+<text class="lbl c" x="700" y="703">SubmitAsync, same end-to-end id</text>
+<path class="w w-h" d="M500,752 L698,752" marker-end="url(#sq-h)"/>
+<text class="lbl c" x="600" y="745">POST transfer (same end-to-end id)</text>
+</svg></div>
+<figcaption>An unknown outcome (timeout, dropped connection, 5xx after the body was sent) is never retried. The resolver asks the partner by end-to-end id and resubmits only on <code>PartnerStatus.NotFound</code>. The “partner” here is the simulator, started with the <code>TimeoutAfterAccept</code> fault. Sources: docs/adr/0001-no-blind-resubmit.md, src/PaymentsBench.Application/Payments/SubmitPayment.cs, src/PaymentsBench.Application/Payments/ResolveSubmittedPayment.cs.</figcaption></figure>
+
+<h3>Outbox and inbox</h3>
+<figure class="fig"><div class="fig-scroll" tabindex="0"><svg class="dg" viewBox="0 0 1000 440" role="img" aria-label="Outbox: the payment row and the outbox row are written in one commit, then OutboxDispatcher publishes each message through IEventPublisher, which today writes a log line. Inbox: a partner notification is checked against IInbox by notification id; a duplicate is acknowledged and ignored, a first delivery is applied with the ledger and the outbox in one commit.">
+<defs>
+<marker id="ob-n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="mk-n" d="M0,0 L10,5 L0,10 z"/></marker>
+<marker id="ob-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="mk-a" d="M0,0 L10,5 L0,10 z"/></marker>
+<marker id="ob-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="mk-ok" d="M0,0 L10,5 L0,10 z"/></marker>
+</defs>
+<text class="hdr" x="20" y="28">outbox · events leave in the same commit as the state change</text>
+<rect class="b-frame" x="20" y="44" width="470" height="112" rx="10"/>
+<text class="s" x="34" y="68">one IUnitOfWork.CommitAsync</text>
+<rect class="b-n" x="34" y="82" width="205" height="56" rx="8"/><text class="t mono sm c" x="136" y="107">payments.UpdateAsync</text><text class="s c" x="136" y="126">new status</text>
+<rect class="b-a" x="256" y="82" width="220" height="56" rx="8"/><text class="t mono sm c" x="366" y="107">IOutbox.EnqueueAsync</text><text class="s c" x="366" y="126">PaymentEvent</text>
+<path class="w w-a" d="M490,110 L548,110" marker-end="url(#ob-a)"/>
+<rect class="b-A" x="550" y="70" width="200" height="80" rx="8"/><text class="t mono sm c on" x="650" y="102">OutboxDispatcher</text><text class="s c on" x="650" y="122">polls every 2 s</text><text class="s c on" x="650" y="138">sets DispatchedAt after</text>
+<path class="w w-a" d="M750,110 L808,110" marker-end="url(#ob-a)"/>
+<rect class="b-z" x="810" y="70" width="180" height="80" rx="8"/><text class="t mono sm c" x="900" y="98">IEventPublisher</text><text class="s c" x="900" y="118">today: a log line</text><text class="s c" x="900" y="134">no broker (R5)</text>
+<text class="s" x="20" y="186">Publishing is at least once, so consumers dedupe on the message id.</text>
+
+<line class="b-z" x1="10" y1="212" x2="990" y2="212"/>
+<text class="hdr" x="20" y="244">inbox · notifications arrive at least once</text>
+<rect class="b-z" x="20" y="262" width="190" height="80" rx="8"/><text class="t sm c" x="115" y="294">Partner (simulated)</text><text class="s c" x="115" y="314">POST</text><text class="s c" x="115" y="330">/partner/notifications</text>
+<path class="w" d="M210,302 L268,302" marker-end="url(#ob-n)"/>
+<rect class="b-a" x="270" y="262" width="230" height="80" rx="8"/><text class="t mono sm c" x="385" y="294">IInbox.TryRecordAsync</text><text class="s c" x="385" y="314">by notificationId</text><text class="s c" x="385" y="330">true on first sight only</text>
+<path class="w" d="M385,344 L385,386" marker-end="url(#ob-n)"/>
+<text class="lbl" x="397" y="370">false</text>
+<rect class="b-n" x="270" y="388" width="230" height="46" rx="8"/><text class="s c" x="385" y="408">NotificationOutcome.Duplicate</text><text class="s c" x="385" y="424">acknowledged and ignored</text>
+<path class="w w-ok" d="M500,302 L558,302" marker-end="url(#ob-ok)"/>
+<text class="lbl c" x="529" y="294">true</text>
+<rect class="b-n" x="560" y="262" width="210" height="80" rx="8"/><text class="t mono sm c" x="665" y="288">ApplyPartnerNotification</text><text class="t mono sm c" x="665" y="304">Handler</text><text class="s c" x="665" y="326">Settled · Rejected · Returned</text>
+<path class="w w-ok" d="M770,302 L828,302" marker-end="url(#ob-ok)"/>
+<rect class="b-ok" x="830" y="262" width="160" height="80" rx="8"/><text class="t sm c" x="910" y="288">one commit</text><text class="s c" x="910" y="308">status, ledger entry,</text><text class="s c" x="910" y="324">outbox row</text>
+</svg></div>
+<figcaption>Events leave through <code>IOutbox</code> and nowhere else; partner notifications are deduplicated by id in <code>IInbox</code>. The dispatcher publishes to a log line today, so at-least-once delivery to a real consumer is a design claim until register row R5 closes. Sources: src/PaymentsBench.Infrastructure/Outbox/OutboxDispatcher.cs, src/PaymentsBench.Application/Payments/ApplyPartnerNotification.cs.</figcaption></figure>
+
+<h3>The seven rules that matter</h3>
+<div class="cards cards-2">
+<article class="card"><h3>1. Submitted is committed before the partner call</h3><p>A crash between the commit and the response leaves a payment at Submitted: the state that means “ask before you act”.</p></article>
+<article class="card"><h3>2. An unknown outcome is never retried</h3><p>Timeouts, dropped connections and 5xx after the body was sent map to <code>SubmitOutcome.Unknown</code>. The HTTP resilience pipeline retries <code>GET</code> only.</p></article>
+<article class="card"><h3>3. Resubmission needs the partner’s word</h3><p>Only <code>PartnerStatus.NotFound</code> allows a second submit, with the same end-to-end id.</p></article>
+<article class="card"><h3>4. The ledger is append-only and balanced</h3><p>A <code>JournalEntry</code> that does not balance per currency cannot be constructed. Balances are sums, never columns.</p></article>
+<article class="card"><h3>5. Outbox out, inbox in</h3><p>Publishing is at least once; consumers dedupe on the message id.</p></article>
+<article class="card"><h3>6. Reconciliation produces breaks, not alerts</h3><p>Three kinds, each with the two amounts, so the person working the queue has what they need on the row (ADR 0003).</p></article>
+<article class="card"><h3>7. Scheme rules are data</h3><p>Cut-off, currency and settlement days per scheme live in <code>scenarios/schemes.yaml</code>; code reads them.</p></article>
+</div>
+<p class="src">docs/ARCHITECTURE.md · “The rules that matter”</p>
+</section>
+
+<section class="panel" id="scenarios" data-tab="The scenarios">
+<p class="eyebrow">faults and schemes as data</p>
+<h2>The scenarios</h2>
+<p class="lede">Each file under <code>scenarios/</code> describes one thing the rail must survive: the fault the simulated partner injects, the calls made, and the state the system must end in.</p>
+<p class="note"><strong>A specification, not yet an executed suite.</strong> The files are parsed by <code>ScenarioFilesTests</code>; no runner drives them end to end. This is register row R3, quoted in full below.</p>
+{{scenarios}}
+<p class="src">scenarios/*.yaml · {{count:scenarios}} files, parsed by the site generator</p>
+<h3>Scheme rules</h3>
+{{schemes}}
+<p class="src">scenarios/schemes.yaml</p>
+</section>
+
+<section class="panel" id="caught" data-tab="What it caught">
+<p class="eyebrow">findings</p>
+<h2>What it caught</h2>
+<p class="lede">Defects that building and exercising the bench turned up, with the evidence, recorded in the findings report.</p>
+{{findings}}
+</section>
+
+<section class="panel" id="not-proved" data-tab="What it has not proved">
+<p class="eyebrow">the register</p>
+<h2>What it has not proved</h2>
+<p class="lede">Each row is quoted from <code>docs/REGISTER.md</code>, with the date it was written and what would close it. A change that closes a row moves it to Closed with a date.</p>
+{{register}}
+<p class="src">docs/REGISTER.md · {{count:register-open}} open rows</p>
+<h3>Closed</h3>
+{{register-closed}}
+</section>
+
+<section class="panel" id="run-it" data-tab="Run it">
+<p class="eyebrow">locally, in memory or with Aspire</p>
+<h2>Run it</h2>
+<p class="lede">No bank is involved: the partner is the simulator. Without a <code>payments</code> connection string the service runs in memory and says so in its log.</p>
+<ol class="steps">
+<li><p>Run the tests. {{tests-total}} tests, no database needed.</p><pre class="code">dotnet test</pre><span class="src">README.md</span> {{cite:tests.application}}</li>
+<li><p>Start the simulated partner and the API, in two terminals.</p><pre class="code">dotnet run --project src/PaymentsBench.PartnerSimulator   # http://localhost:5101
+dotnet run --project src/PaymentsBench.Api                # http://localhost:5100</pre><p class="muted">Or, with Aspire (PostgreSQL, simulator, API, dashboard): <code>dotnet run --project src/PaymentsBench.AppHost</code></p></li>
+<li><p>Initiate and submit a transfer. The <code>Idempotency-Key</code> header is required.</p><pre class="code">curl -X POST localhost:5100/payments -H 'Content-Type: application/json' -H 'Idempotency-Key: demo-1' \
+  -d '{"endToEndId":"E2E-1","amount":100.00,"currency":"EUR","debtorAccount":"DE89...","creditorAccount":"GB33...","scheme":"sepa"}'
+curl -X POST localhost:5100/payments/&lt;id&gt;/submit</pre></li>
+<li><p>Make the simulated partner time out after accepting, then watch the resolver recover without a duplicate.</p><pre class="code">curl -X PUT localhost:5101/faults -H 'Content-Type: application/json' -d '{"kind":"TimeoutAfterAccept","delayMilliseconds":8000}'
+curl -X POST localhost:5100/payments/&lt;id&gt;/submit      # -&gt; Submitted (outcome unknown)
+curl -X PUT localhost:5101/faults -H 'Content-Type: application/json' -d '{"kind":"None"}'
+curl -X POST localhost:5100/payments/&lt;id&gt;/resolve     # -&gt; {"outcome":"Accepted"}, one transfer at the partner</pre></li>
+<li><p>Settle, notify (twice: the second is a duplicate), reconcile, read the ledger.</p><pre class="code">curl -X POST 'localhost:5101/transfers/E2E-1/settle?valueDate=2026-10-14'
+curl -X POST localhost:5100/partner/notifications -H 'Content-Type: application/json' \
+  -d '{"notificationId":"N-1","endToEndId":"E2E-1","kind":"Settled","valueDate":"2026-10-14"}'
+curl -X POST localhost:5100/reconciliation/runs/2026-10-14
+curl localhost:5100/payments/&lt;id&gt;/ledger</pre><span class="src">README.md · “Run it”</span></li>
+<li><p>Rebuild this page after changing the register, a scenario or <code>docs/site/status.json</code>.</p><pre class="code">node scripts/site-build.mjs           # writes docs/index.html
+node scripts/site-build.mjs --check   # exits 1 if the committed page is stale</pre></li>
+</ol>
+</section>
+
+<section class="panel" id="documents" data-tab="Documents">
+<p class="eyebrow">where everything else lives</p>
+<h2>Documents</h2>
+<p class="lede">Documentation lives in the repository, next to what it describes (principle P14).</p>
+{{documents}}
+<h3>Adopted standards and the documentation model</h3>
+<ul class="plain">
+<li><a href="https://github.com/konradcinkusz/architecture-standards">architecture-standards</a> <span class="muted">the reference architecture this repository conforms to</span></li>
+<li><a href="https://github.com/konradcinkusz/agent-eval-bench">agent-eval-bench</a> <span class="muted">the documentation model: its approach is reproduced here, its prose is not</span></li>
+</ul>
+</section>
