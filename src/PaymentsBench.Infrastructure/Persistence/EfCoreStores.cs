@@ -42,6 +42,23 @@ public sealed class EfPaymentRepository : IPaymentRepository
         return rows.Select(r => Hand(r)!).ToList();
     }
 
+    public async Task<SubmittedPaymentWindow> ListSubmittedBeforeAsync(DateTimeOffset cutoff, int limit, CancellationToken cancellationToken)
+    {
+        // Both queries filter on Status first, so the Status index narrows to the Submitted rows; the cut-off, order and limit run in SQL.
+        var submitted = (int)PaymentStatus.Submitted;
+        var ids = await db.Payments.AsNoTracking()
+            .Where(p => p.Status == submitted && p.UpdatedAt < cutoff)
+            .OrderBy(p => p.UpdatedAt)
+            .ThenBy(p => p.Id)
+            .Take(limit)
+            .Select(p => p.Id)
+            .ToListAsync(cancellationToken);
+        var oldest = await db.Payments.AsNoTracking()
+            .Where(p => p.Status == submitted)
+            .MinAsync(p => (DateTimeOffset?)p.UpdatedAt, cancellationToken);
+        return new SubmittedPaymentWindow(ids, oldest);
+    }
+
     public async Task<PaymentPage> ListAsync(PaymentQuery query, CancellationToken cancellationToken)
     {
         var filtered = db.Payments.AsNoTracking().AsQueryable();

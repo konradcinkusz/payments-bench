@@ -223,6 +223,9 @@ public sealed class ConcurrencyTests(MigratedPostgresFixture database) : IClassF
 
         public Task<IReadOnlyList<Payment>> ListByStatusAsync(PaymentStatus status, CancellationToken cancellationToken) => inner.ListByStatusAsync(status, cancellationToken);
 
+        public Task<SubmittedPaymentWindow> ListSubmittedBeforeAsync(DateTimeOffset cutoff, int limit, CancellationToken cancellationToken) =>
+            inner.ListSubmittedBeforeAsync(cutoff, limit, cancellationToken);
+
         public Task<PaymentPage> ListAsync(PaymentQuery query, CancellationToken cancellationToken) => inner.ListAsync(query, cancellationToken);
 
         public Task AddAsync(Payment payment, CancellationToken cancellationToken) => inner.AddAsync(payment, cancellationToken);

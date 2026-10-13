@@ -75,6 +75,7 @@ public sealed class MigrationGateTests(PostgresFixture database) : IClassFixture
             services.AddDbContext<PaymentsDbContext>(o => o.UseNpgsql(database.ConnectionString));
             services.AddSingleton(gate);
             services.AddSingleton<IEventPublisher>(publisher);
+            services.AddSingleton<OutboxBatchDispatcher>();
             services.AddSingleton<OutboxDispatcher>();
             services.AddHostedService(sp => sp.GetRequiredService<OutboxDispatcher>());
         }).Build();
@@ -97,6 +98,7 @@ public sealed class MigrationGateTests(PostgresFixture database) : IClassFixture
             services.AddDbContext<PaymentsDbContext>(o => o.UseNpgsql(database.ConnectionString));
             services.AddSingleton(gate);
             services.AddSingleton<IEventPublisher>(publisher);
+            services.AddSingleton<OutboxBatchDispatcher>();
             services.AddSingleton<OutboxDispatcher>();
             services.AddHostedService(sp => sp.GetRequiredService<OutboxDispatcher>());
         }).Build();

@@ -53,6 +53,23 @@ public sealed class InMemoryPaymentRepository : IPaymentRepository
         }
     }
 
+    public Task<SubmittedPaymentWindow> ListSubmittedBeforeAsync(DateTimeOffset cutoff, int limit, CancellationToken cancellationToken)
+    {
+        lock (gate)
+        {
+            var submitted = payments.Values.Select(s => s.State).Where(p => p.Status == PaymentStatus.Submitted).ToList();
+            var ids = submitted
+                .Where(p => p.UpdatedAt < cutoff)
+                .OrderBy(p => p.UpdatedAt)
+                .ThenBy(p => p.Id)
+                .Take(limit)
+                .Select(p => p.Id)
+                .ToList();
+            DateTimeOffset? oldest = submitted.Count == 0 ? null : submitted.Min(p => p.UpdatedAt);
+            return Task.FromResult(new SubmittedPaymentWindow(ids, oldest));
+        }
+    }
+
     public Task<PaymentPage> ListAsync(PaymentQuery query, CancellationToken cancellationToken)
     {
         lock (gate)
