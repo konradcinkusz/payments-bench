@@ -82,7 +82,7 @@ public class PartnerRetryTests
     [InlineData("POST", false)]
     public async Task Only_a_lookup_that_threw_a_transport_error_is_retried(string method, bool retried)
     {
-        var request = new HttpRequestMessage(new HttpMethod(method), "http://partner/x");
+        using var request = new HttpRequestMessage(new HttpMethod(method), "http://partner/x");
         var context = Polly.ResilienceContextPool.Shared.Get(CancellationToken.None);
         context.Properties.Set(new Polly.ResiliencePropertyKey<HttpRequestMessage?>("Resilience.Http.RequestMessage"), request);
         try
