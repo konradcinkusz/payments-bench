@@ -9,4 +9,9 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Scheme and calendar data (rule 7): copied next to the binaries; Schemes__Directory overrides. -->
+    <None Include="..\..\scenarios\schemes.yaml" Link="scenarios\schemes.yaml" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\scenarios\calendars\*.yaml" Link="scenarios\calendars\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
