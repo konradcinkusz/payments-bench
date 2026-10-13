@@ -138,7 +138,7 @@ public class Pain001Tests
     [Fact]
     public void A_document_with_an_external_entity_is_refused_and_nothing_is_fetched()
     {
-        var secret = Path.Combine(Path.GetTempPath(), $"iso20022-xxe-{Guid.NewGuid():N}.txt");
+        var secret = Path.Join(Path.GetTempPath(), $"iso20022-xxe-{Guid.NewGuid():N}.txt");
         File.WriteAllText(secret, "TOP-SECRET-CONTENT");
         try
         {
@@ -188,7 +188,7 @@ public class Pain001Tests
     [Fact]
     public async Task A_stream_is_read_like_a_string()
     {
-        await using var stream = File.OpenRead(Path.Combine(AppContext.BaseDirectory, "samples", Samples.TwoTransactions));
+        await using var stream = File.OpenRead(Path.Join(AppContext.BaseDirectory, "samples", Samples.TwoTransactions));
 
         var commands = await Pain001Reader.ReadAsync(stream, SecureXml.DefaultMaxBytes, CancellationToken.None);
 

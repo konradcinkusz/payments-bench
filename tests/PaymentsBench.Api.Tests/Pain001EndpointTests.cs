@@ -7,7 +7,7 @@ namespace PaymentsBench.Api.Tests;
 
 public class Pain001EndpointTests : ApiTestBase
 {
-    private static string Sample(string name) => File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "samples", name));
+    private static string Sample(string name) => File.ReadAllText(Path.Join(AppContext.BaseDirectory, "samples", name));
 
     private async Task<HttpResponseMessage> PostXmlAsync(string xml, string mediaType = "application/xml")
     {

@@ -6,5 +6,5 @@ internal static class Samples
     public const string UnmappedServiceLevel = "pain001-unmapped-service-level.xml";
     public const string ThreeEntries = "camt053-three-entries.xml";
 
-    public static string Read(string name) => File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "samples", name));
+    public static string Read(string name) => File.ReadAllText(Path.Join(AppContext.BaseDirectory, "samples", name));
 }
