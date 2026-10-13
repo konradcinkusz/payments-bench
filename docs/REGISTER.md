@@ -21,7 +21,7 @@ Rows are deleted only when the closing condition is met; a closed row moves to t
 ## Load numbers (R9)
 
 First run of `k6/payments.js` through `scripts/load-test.sh` (see [`k6/README.md`](../k6/README.md)),
-2026-10-13, on `main` at `5937b0a`. Everything is simulated: the partner is the
+2026-10-13, on `main` at `5937b0a` (re-run below at `2f0eea9`). Everything is simulated: the partner is the
 `PaymentsBench.PartnerSimulator`, the stores are in memory.
 
 - **Machine:** 4 CPUs (`nproc`), 15 GiB RAM (`free -h`), `Linux 6.18.44-fc-v114 #1 SMP PREEMPT_DYNAMIC x86_64` (`uname -a`), a virtual machine; API, simulator and k6 shared it.
@@ -38,6 +38,7 @@ First run of `k6/payments.js` through `scripts/load-test.sh` (see [`k6/README.md
 
 - **Duplicates:** 0 duplicate payments (about 1 in 10 initiates is replayed with the same key and must return the same payment id). 0 simulator mismatches (every `Accepted` payment had its transfer at the simulator, every `Rejected` one had none). 1814 expected 409s. **Duplicate transfers at the simulator are not counted**: the simulator cannot report submissions per end-to-end id (R14).
 - **Thresholds:** the run **failed** its error-rate thresholds (12.45 % overall against 1 %). Every real failure was `resolve` answering 500 (10531 in `ServerError`, 872 in `RejectAll`, 10 in `TimeoutAfterAccept`); `initiate` and `submit` had none. All p95 thresholds passed. Cause and row: R15.
+- **Re-run after #10 and #14:** a 90 s run (18 s per profile) on `main` at `2f0eea9` gave the same shape: `None` 1198 requests/s with p95 14 ms, `Latency` 19.7 and 1506 ms, `TimeoutAfterAccept` 8.6 and 4012 ms, `ServerError` 1577 and 15 ms, `RejectAll` 942 and 25 ms; 0 duplicate payments, 0 simulator mismatches, and again every real failure was `resolve` (8967 in `ServerError`, 2031 in `RejectAll`). The error shares of `ServerError` (31.6 %) and `RejectAll` (12.0 %) depend on the phase length, because the breaker stays open for a fixed time after a fault ends; the table above is the 30 s run.
 - **Reading the profiles:** `None` is the only profile with no fault; its 1210 requests/s is the in-memory ceiling for this machine and says nothing about PostgreSQL. `Latency` and `TimeoutAfterAccept` are bounded by 10 users each waiting 1.5 s and 4 s (the API's attempt timeout) on every submit. In `ServerError` and `RejectAll` the requests are fast because the circuit breaker is open or the partner answers at once; the high `ServerError` request rate is mostly failed `resolve` calls. A request that straddles a phase boundary keeps the profile it started in.
 
 ### Finding: resolve fails with 500 while the circuit is open
@@ -50,8 +51,12 @@ pipeline's circuit breaker (50 % failure ratio, 10 calls in 30 s) opens, and fro
 breaker is still open (`RejectAll`). Reproduced by hand with 14 sequential payments under
 `ServerError`: the first three resolves answer 200, every later one 500. The payment is not
 corrupted (`submit` already left it `Submitted`), so the harm is a failing recovery path exactly
-when recovery is needed, not a lost or duplicated transfer. Recorded as R15; the code is stream A's
-and is not changed here.
+when recovery is needed, not a lost or duplicated transfer. Still reproduces after #10: the
+exception escapes at `src/PaymentsBench.Infrastructure/Partner/HttpPartnerGateway.cs:48` (the
+`client.GetAsync` call in `GetStatusAsync`, through the resilience handler), passes
+`src/PaymentsBench.Application/Payments/ResolveSubmittedPayment.cs:42` and the endpoint, and is turned into a
+500 by `PaymentsBench.Api.Errors.ProblemDetailsExceptionHandler`, which now gives it a problem body
+but not a different status. Recorded as R15; the code is stream A's and is not changed here.
 
 ## Closed
 

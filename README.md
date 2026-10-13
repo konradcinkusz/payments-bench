@@ -110,7 +110,7 @@ Never run, recorded in [`docs/REGISTER.md`](docs/REGISTER.md) rather than in a f
   executes them against the API and the simulator (R3).
 - **PostgreSQL has not run in CI** (R4), the outbox publishes to a log line (R5), concurrency
   is a column and not a test (R6), the calendar is weekends only (R7), nothing resolves a
-  `Submitted` payment on its own (R8), there is no load or chaos run (R9), and there is no
+  `Submitted` payment on its own (R8), the first load run is in memory only and found a defect in `resolve` (R14, R15), and there is no
   sanctions, AML or limits control (R10).
 - **Three open defects**, F-3 to F-5 in [`docs/FINDINGS.md`](docs/FINDINGS.md).
 
