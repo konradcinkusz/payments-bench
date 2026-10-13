@@ -12,7 +12,16 @@ public interface IPaymentRepository
 
     Task<IReadOnlyList<Payment>> ListByStatusAsync(PaymentStatus status, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// The ids of Submitted payments last updated before <paramref name="cutoff"/>, oldest first
+    /// (ties by id), at most <paramref name="limit"/> of them, plus the oldest <c>UpdatedAt</c> among
+    /// all Submitted payments (null when there are none). For the sweep, which must not load aggregates it will not touch.
+    /// </summary>
+    Task<SubmittedPaymentWindow> ListSubmittedBeforeAsync(DateTimeOffset cutoff, int limit, CancellationToken cancellationToken);
+
     Task AddAsync(Payment payment, CancellationToken cancellationToken);
 
     Task UpdateAsync(Payment payment, CancellationToken cancellationToken);
 }
+
+public sealed record SubmittedPaymentWindow(IReadOnlyList<Guid> Ids, DateTimeOffset? OldestUpdatedAt);

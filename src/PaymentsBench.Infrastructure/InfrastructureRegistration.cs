@@ -10,6 +10,7 @@ using PaymentsBench.Infrastructure.Outbox;
 using PaymentsBench.Infrastructure.Partner;
 using PaymentsBench.Infrastructure.Persistence;
 using PaymentsBench.Infrastructure.Schemes;
+using PaymentsBench.Infrastructure.Sweeping;
 
 namespace PaymentsBench.Infrastructure;
 
@@ -67,6 +68,8 @@ public static class InfrastructureRegistration
             services.AddHostedService<OutboxDispatcher>();
             services.AddSingleton<StorageMode>(new StorageMode("postgresql", Degraded: false));
         }
+
+        services.AddSubmittedPaymentSweeper(configuration);
 
         services.AddHealthChecks().AddCheck<MigrationHealthCheck>("migrations");
 

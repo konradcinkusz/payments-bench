@@ -26,6 +26,20 @@ public sealed class InMemoryPaymentRepository : IPaymentRepository
     public Task<IReadOnlyList<Payment>> ListByStatusAsync(PaymentStatus status, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Payment>>(_payments.Values.Where(p => p.Status == status).ToList());
 
+    public Task<SubmittedPaymentWindow> ListSubmittedBeforeAsync(DateTimeOffset cutoff, int limit, CancellationToken cancellationToken)
+    {
+        var submitted = _payments.Values.Where(p => p.Status == PaymentStatus.Submitted).ToList();
+        var ids = submitted
+            .Where(p => p.UpdatedAt < cutoff)
+            .OrderBy(p => p.UpdatedAt)
+            .ThenBy(p => p.Id)
+            .Take(limit)
+            .Select(p => p.Id)
+            .ToList();
+        DateTimeOffset? oldest = submitted.Count == 0 ? null : submitted.Min(p => p.UpdatedAt);
+        return Task.FromResult(new SubmittedPaymentWindow(ids, oldest));
+    }
+
     public Task AddAsync(Payment payment, CancellationToken cancellationToken)
     {
         if (!_payments.TryAdd(payment.Id, payment))

@@ -78,6 +78,31 @@ public class SubmitAndResolveTests
     }
 
     [Fact]
+    public async Task A_resubmit_whose_own_outcome_is_unknown_is_still_unknown_and_the_payment_stays_submitted()
+    {
+        var host = new TestHost();
+        var payment = await host.Initiate.HandleAsync(TestHost.Command(), CancellationToken.None);
+        host.Partner.SubmitAnswers.Enqueue(new SubmitResult(SubmitOutcome.Unknown, null, "HttpRequestException"));
+        host.Partner.SubmitAnswers.Enqueue(new SubmitResult(SubmitOutcome.Unknown, null, "TimeoutRejectedException"));
+        await host.Submit.HandleAsync(new SubmitPayment(payment.Id), CancellationToken.None);
+        var commitsBefore = host.UnitOfWork.Commits;
+        var eventsBefore = host.Outbox.Events.Count;
+
+        var outcome = await host.Resolve.HandleAsync(new ResolveSubmittedPayment(payment.Id), CancellationToken.None);
+
+        Assert.Equal(ResolutionOutcome.StillUnknown, outcome);
+        Assert.Equal(PaymentStatus.Submitted, (await host.Payments.GetAsync(payment.Id, CancellationToken.None))!.Status);
+        Assert.Equal(commitsBefore, host.UnitOfWork.Commits);
+        Assert.Equal(eventsBefore, host.Outbox.Events.Count);
+
+        // The next resolve asks the partner again before it does anything else (ADR 0001).
+        host.Partner.StatusAnswers.Enqueue(new PartnerStatusResult(PartnerStatus.Accepted, "P-9", null, null));
+        var next = await host.Resolve.HandleAsync(new ResolveSubmittedPayment(payment.Id), CancellationToken.None);
+        Assert.Equal(ResolutionOutcome.Accepted, next);
+        Assert.Equal(2, host.Partner.Submits.Count);
+    }
+
+    [Fact]
     public async Task Resolving_a_payment_that_is_not_submitted_does_nothing()
     {
         var host = new TestHost();
