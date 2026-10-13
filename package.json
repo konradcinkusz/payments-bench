@@ -14,7 +14,9 @@
     "lint:links": "node scripts/check-links.mjs",
     "lint:diagrams": "node scripts/check-diagrams.mjs",
     "render:diagrams": "node scripts/render-diagrams.mjs",
-    "lint:papers": "node scripts/check-papers.mjs"
+    "lint:papers": "node scripts/check-papers.mjs",
+    "site:build": "node scripts/site-build.mjs",
+    "site:check": "node scripts/site-build.mjs --check"
   },
   "devDependencies": {
     "@mermaid-js/mermaid-cli": "11.16.0",
