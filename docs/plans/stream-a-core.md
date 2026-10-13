@@ -212,4 +212,3 @@ What the slices caught on the way, for `docs/FINDINGS.md`. Each one is fixed unl
 | New register rows appended below the prose that follows the open table rendered outside it, twice | Stream lead review of #23 and #24 | Fixed in both; stream C added a site-build check (#27) |
 | The F-5 fix made the status lookup retry every exception, `BrokenCircuitException` included, so during a partner outage each `resolve` and each sweep waited out the retry backoff (p95 13 ms to 9.6 s under `ServerError`) | Stream B, `load.yml` re-run after #21 | Fixed in #30 (A9): an open circuit and a spent total budget are not retried; R27. Stream B re-runs `load.yml` to confirm |
 | CodeQL test-hygiene notes on the integration tests (an undisposed `CancellationTokenSource`, an unused assignment) | CodeQL on #13 | Open; not blocking, left for a hygiene pass |
-
