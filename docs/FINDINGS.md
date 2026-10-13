@@ -250,8 +250,9 @@ requests/s.
 
 **Status.** Fixed in #30 (stream A, slice A9): `PartnerResilience.ShouldRetry` never retries an open
 or isolated circuit or a spent total budget, still retries a transport error, an attempt timeout or
-a 5xx on a `GET`, and never a `POST`. Register row R27 is closed. The k6 numbers have not been
-re-run since the fix; R15 says so.
+a 5xx on a `GET`, and never a `POST`. Register row R27 is closed. The repeat run after the fix
+(`load.yml` run 38446330396 on `main` at `579e135`, recorded in R15) passed every threshold: zero
+real failures, `ServerError` p95 11 ms at 1706 requests/s.
 
 **Lesson.** A fix to a retry policy is a change to behaviour under load, and only a load run showed it.
 
