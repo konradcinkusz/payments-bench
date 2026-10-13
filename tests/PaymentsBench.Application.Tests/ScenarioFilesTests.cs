@@ -4,8 +4,9 @@ using YamlDotNet.Serialization.NamingConventions;
 namespace PaymentsBench.Application.Tests;
 
 /// <summary>
-/// Until the scenario runner exists, this keeps the scenario files honest: every one parses,
-/// has an id, a class, at least one step and an expected terminal status that the domain knows.
+/// A cheap, database-free check on the scenario files: every one parses, has an id, a class, at
+/// least one step and an expected terminal status that the domain knows. The runner in
+/// <c>tests/PaymentsBench.Scenarios</c> is what executes them.
 /// </summary>
 public class ScenarioFilesTests
 {

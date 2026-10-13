@@ -1,7 +1,17 @@
 # payments-bench
 
+[![Ask Me Anything](https://flat.badgen.net/static/Ask%20me/anything?icon=github&color=black&scale=1.01)](https://github.com/konradcinkusz "Ask Me Anything")
 [![License](https://flat.badgen.net/github/license/konradcinkusz/payments-bench?icon=github&color=black&scale=1.01)](https://github.com/konradcinkusz/payments-bench/blob/main/LICENSE "License")
-[![CI](https://github.com/konradcinkusz/payments-bench/actions/workflows/ci.yml/badge.svg)](https://github.com/konradcinkusz/payments-bench/actions/workflows/ci.yml "CI")
+[![Maintained](https://flat.badgen.net/static/Maintained/yes?icon=github&color=black&scale=1.01)](https://github.com/konradcinkusz/payments-bench/commits/main "Maintained")
+[![Branches](https://flat.badgen.net/github/branches/konradcinkusz/payments-bench?icon=github&color=black&scale=1.01)](https://github.com/konradcinkusz/payments-bench/branches "Branches")
+[![Commits](https://flat.badgen.net/github/commits/konradcinkusz/payments-bench?icon=github&color=black&scale=1.01)](https://github.com/konradcinkusz/payments-bench/commits "Commits")
+[![Issues](https://flat.badgen.net/github/issues/konradcinkusz/payments-bench?icon=github&color=black&scale=1.01)](https://github.com/konradcinkusz/payments-bench/issues "Issues")
+[![Pull requests](https://flat.badgen.net/github/prs/konradcinkusz/payments-bench?icon=github&color=black&scale=1.01)](https://github.com/konradcinkusz/payments-bench/pulls "Pull requests")
+[![CI](https://github.com/konradcinkusz/payments-bench/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/konradcinkusz/payments-bench/actions/workflows/ci.yml "CI")
+[![Containers](https://github.com/konradcinkusz/payments-bench/actions/workflows/containers.yml/badge.svg?branch=main)](https://github.com/konradcinkusz/payments-bench/actions/workflows/containers.yml "Containers")
+[![CodeQL](https://github.com/konradcinkusz/payments-bench/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/konradcinkusz/payments-bench/actions/workflows/codeql.yml "CodeQL")
+[![Secret Scan](https://github.com/konradcinkusz/payments-bench/actions/workflows/secret-scan.yml/badge.svg?branch=main)](https://github.com/konradcinkusz/payments-bench/actions/workflows/secret-scan.yml "Secret Scan")
+[![Lint](https://github.com/konradcinkusz/payments-bench/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/konradcinkusz/payments-bench/actions/workflows/lint.yml "Lint")
 [![Build Overview PDF](https://github.com/konradcinkusz/payments-bench/actions/workflows/build-overview-pdf.yml/badge.svg)](https://github.com/konradcinkusz/payments-bench/actions/workflows/build-overview-pdf.yml "Build Overview PDF")
 
 An outbound bank-transfer service, built to show the mechanisms a payment rail needs in order to
@@ -42,7 +52,8 @@ Each figure names the file it was measured in; the measurements were taken on `m
 ## Run it
 
 ```bash
-dotnet test                                   # 272 tests; the 36 integration tests need PostgreSQL (see below)
+dotnet test                                   # 318 tests; the 41 integration tests need PostgreSQL (see below)
+dotnet test tests/PaymentsBench.Scenarios     # every scenarios/*.yaml end to end, in process; PostgreSQL too when the variable below is set
 dotnet run --project src/PaymentsBench.AppHost   # Aspire: PostgreSQL + simulator + API + dashboard
 ```
 
@@ -51,6 +62,17 @@ with Docker running they start a `postgres:16-alpine` Testcontainers container; 
 `PAYMENTSBENCH_TEST_POSTGRES` to a server that trusts you, for example
 `PAYMENTSBENCH_TEST_POSTGRES="Host=localhost;Port=5432;Username=postgres" dotnet test`. Each test
 class gets its own throwaway database. With neither, they fail with a message saying so; they are never skipped.
+
+End to end, over HTTP, with Playwright (`tests/PaymentsBench.E2E`): the suite starts the simulator and
+the API in the in-memory mode, drives the happy path, the duplicate request and notification, the
+timeout-after-accept and 503 recoveries, the rejection, the statement drift and the return, and checks
+the documentation site renders from `file://` with no external request. It screenshots the site into
+`tests/PaymentsBench.E2E/screenshots/` (not committed). With `PB_DASHBOARD_URL` set to a running
+OpenTelemetry dashboard it also screenshots the traces of the run.
+
+```bash
+dotnet build -c Release && cd tests/PaymentsBench.E2E && npm ci && npx playwright install chromium && npx playwright test
+```
 
 Or without Aspire, in memory, two terminals:
 

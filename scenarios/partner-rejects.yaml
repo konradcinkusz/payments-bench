@@ -1,0 +1,25 @@
+id: partner-rejects
+class: partner-failure
+description: >
+  The partner refuses the transfer outright. The payment ends Rejected, the reserved funds go
+  back to the customer, nothing stays pending, and the refusal is not retried.
+partner:
+  fault: reject-all
+  reasonCode: AC01
+steps:
+  - initiate:
+      idempotencyKey: rej-1
+      endToEndId: E2E-REJ-1
+      amount: 40.00
+      currency: EUR
+      scheme: sepa
+  - submit: E2E-REJ-1
+expect:
+  status: Rejected
+  ledgerEntries: 2
+  ledger:
+    customer-funds: 0.00
+    pending-outbound: 0.00
+    nostro: 0.00
+  partnerSubmits: 1
+  partnerStatusQueries: 0

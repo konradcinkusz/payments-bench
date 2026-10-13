@@ -1,4 +1,5 @@
 using PaymentsBench.Application.Payments;
+using PaymentsBench.Application.Ports;
 using PaymentsBench.Domain;
 using PaymentsBench.Domain.Payments;
 using PaymentsBench.Iso20022;
@@ -16,6 +17,7 @@ public static class ProblemClassifier
         PaymentNotFoundException e => (StatusCodes.Status404NotFound, "Payment not found", e.Message),
         IdempotencyConflictException e => (StatusCodes.Status409Conflict, "Idempotency conflict", e.Message),
         InvalidTransitionException e => (StatusCodes.Status409Conflict, "Invalid transition", e.Message),
+        ConcurrencyConflictException e => (StatusCodes.Status409Conflict, "Concurrent modification", e.Message),
         DomainException e => (StatusCodes.Status422UnprocessableEntity, "Request cannot be processed", e.Message),
         MessageTooLargeException e => (StatusCodes.Status413PayloadTooLarge, "Document too large", e.Message),
         MessageFormatException e => (StatusCodes.Status400BadRequest, "Invalid ISO 20022 document", e.Message),

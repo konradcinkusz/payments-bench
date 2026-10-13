@@ -141,7 +141,7 @@ public sealed class OutboxContractTests : IAsyncLifetime, IDisposable
             var payment = NewPayment(key);
             await new EfPaymentRepository(failing).AddAsync(payment, CancellationToken.None);
             await new EfOutbox(failing).EnqueueAsync(new PaymentInitiated(payment.Id, Samples.Start, new Money(1m, "EUR"), "sepa"), CancellationToken.None);
-            await Assert.ThrowsAsync<DbUpdateException>(() => new EfUnitOfWork(failing).CommitAsync(CancellationToken.None));
+            await Assert.ThrowsAsync<PaymentsBench.Application.Ports.ConcurrencyConflictException>(() => new EfUnitOfWork(failing).CommitAsync(CancellationToken.None));
         }
 
         // And a unit of work abandoned before commit.
