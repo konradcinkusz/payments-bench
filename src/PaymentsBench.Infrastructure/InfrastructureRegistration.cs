@@ -42,6 +42,7 @@ public static class InfrastructureRegistration
             services.AddSingleton<IOutbox>(sp => sp.GetRequiredService<InMemoryOutbox>());
             services.AddSingleton<IInbox, InMemoryInbox>();
             services.AddSingleton<IUnitOfWork, NoOpUnitOfWork>();
+            services.AddSingleton(MigrationGate.Completed());
             services.AddSingleton<StorageMode>(new StorageMode("in-memory", Degraded: true));
         }
         else
@@ -53,10 +54,13 @@ public static class InfrastructureRegistration
             services.AddScoped<IInbox, EfInbox>();
             services.AddScoped<IUnitOfWork, EfUnitOfWork>();
             services.AddSingleton<IEventPublisher, LoggingEventPublisher>();
+            services.AddSingleton<MigrationGate>();
             services.AddHostedService<MigrationHostedService>();
             services.AddHostedService<OutboxDispatcher>();
             services.AddSingleton<StorageMode>(new StorageMode("postgresql", Degraded: false));
         }
+
+        services.AddHealthChecks().AddCheck<MigrationHealthCheck>("migrations");
 
         var partnerBaseAddress = configuration["Partner:BaseAddress"] ?? "http://partner";
         services.AddHttpClient<IPartnerGateway, HttpPartnerGateway>(PartnerClientName, client =>
