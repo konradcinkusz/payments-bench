@@ -20,28 +20,28 @@ Baseline on `main` when this plan was written (2026-10-13): `dotnet build -warna
    pinned, never `:latest`. It is the only service holding a signing key (RS256); the API
    validates against its JWKS through `MetadataAddress` =
    `<authority>/.well-known/openid-configuration`. Its source is never vendored or modified.
-2. **Deny by default.** The API sets a fallback authorization policy that requires an
+1. **Deny by default.** The API sets a fallback authorization policy that requires an
    authenticated user; the anonymous list is short and explicit: `/health`, `/alive`, and the
    OpenAPI document in Development. The partner simulator stays open: it is a simulated bank,
    not a product surface. `Program.cs` changes stay registration lines (P9); the wiring lives in
    an extension method in the API project.
-3. **Degraded identity is Development-only.** With `Auth:Authority` unset the API logs a warning,
+1. **Degraded identity is Development-only.** With `Auth:Authority` unset the API logs a warning,
    reports `auth: development-policy` in its startup banner, and allows anonymous calls, so
    `dotnet run` in memory still works with no identity provider (P8). Outside Development an
    unset `Auth:Authority` stops startup naming the setting: a deployed payment API without
    authentication is not a degraded mode, it is an open one. Recorded as an ADR and as a
    deviation from P8.
-4. **Deploy never needs a paid account to pass CI.** Every `flyctl` step in `deploy.yml` is
+1. **Deploy never needs a paid account to pass CI.** Every `flyctl` step in `deploy.yml` is
    guarded: without `FLY_API_TOKEN` the job writes a step summary saying what it would have
    deployed and exits green. Secrets are listed by name only (`docs/DEPLOYMENT.md`).
-5. **Images go to GHCR** (blueprint §2: GHCR wins over `registry.fly.io`), built once per tag and
+1. **Images go to GHCR** (blueprint §2: GHCR wins over `registry.fly.io`), built once per tag and
    deployed by digest/tag with `flyctl deploy --image`.
-6. **Secret scanning is gitleaks, twice**: a pre-commit hook installed by `scripts/setup.sh` and a
+1. **Secret scanning is gitleaks, twice**: a pre-commit hook installed by `scripts/setup.sh` and a
    CI workflow scanning full history (same `.gitleaks.toml`).
-7. **Numbers are claimed only once measured.** R9 is narrowed with the numbers a real k6 run
+1. **Numbers are claimed only once measured.** R9 is narrowed with the numbers a real k6 run
    produced on the CI runner or the session container, with the machine named; it closes only
    if its closing condition is met as written.
-8. **Shared files** (`Program.cs`, `ci.yml`, `README.md`, `docs/REGISTER.md`,
+1. **Shared files** (`Program.cs`, `ci.yml`, `README.md`, `docs/REGISTER.md`,
    `PaymentsBench.sln`) are edited minimally and every slice rebases on `main` before merge.
    New workflows go in their own files rather than growing `ci.yml`. New register rows and ADRs
    take the next free number on `main` at merge time.
@@ -73,6 +73,7 @@ the dependency between slices.
 Principle: P5 (secret scanner in CI), repo-baseline §1-§4 and §9.
 
 Acceptance criteria:
+
 - `.gitleaks.toml` (extends the default rules; any allowlist entry is narrow and commented).
 - `scripts/hooks/pre-commit` runs gitleaks on staged changes; `scripts/install-hooks.sh`
   installs it; `scripts/scan-secrets.sh` mirrors the CI job locally.
@@ -98,6 +99,7 @@ Register: none closed; opens none.
 Principle: P6.
 
 Acceptance criteria:
+
 - `src/PaymentsBench.Api/Dockerfile` and `src/PaymentsBench.PartnerSimulator/Dockerfile`:
   multi-stage (`sdk:10.0` build, `aspnet:10.0` final), project files and
   `Directory.*.props`/`global.json` copied and restored before the source, `ASPNETCORE_URLS=http://+:8080`,
@@ -117,6 +119,7 @@ Principle: P5 (JWT / OIDC, asymmetric + JWKS), P8, P9; compliance checklist "exa
 service holds a signing key; all others validate against its JWKS endpoint".
 
 Acceptance criteria:
+
 - `Microsoft.AspNetCore.Authentication.JwtBearer` (central version) in the API.
 - `src/PaymentsBench.Api/Identity/IdentityRegistration.cs` (or equivalent extension):
   `Auth:Authority`, `Auth:Issuer`, `Auth:Audience` from configuration; `MetadataAddress` =
@@ -146,6 +149,7 @@ by bearer token only, i.e. without partner signature verification.
 Principle: P7, P12, shared-service-reuse §4-§5.
 
 Acceptance criteria:
+
 - `flyio/api.fly.toml` (`min_machines_running = 1`, synchronous path), `flyio/partner.fly.toml`
   (`min_machines_running = 1`: the API calls it in-request), `flyio/authservice.fly.toml`
   (pinned image, `min_machines_running = 1`, its own PostgreSQL), `flyio/postgres.fly.toml`
@@ -168,6 +172,7 @@ workflow logic (no token) green on the PR via `workflow_dispatch` or a test tag 
 Principle: P15, metrics-exposition guide.
 
 Acceptance criteria:
+
 - OTLP end to end proved: the Aspire dashboard (or an OTLP collector in the session) receives
   traces, metrics and logs from the API and the simulator; the proof is recorded in the PR.
 - Health-check requests filtered out of traces (P15).
@@ -186,6 +191,7 @@ Register: none closed.
 Principle: P13 (test at the layer that has the logic), register R9.
 
 Acceptance criteria:
+
 - `k6/payments.js`: initiate + submit (+ resolve for Submitted) against the API; a separate
   scenario cycles the simulator's fault profiles (`None`, latency, `TimeoutAfterAccept`, 503,
   reject-all) through `PUT /faults` on a timer; thresholds on error rate and p95; it counts
@@ -201,6 +207,7 @@ Verification: one real run, its summary attached to the PR.
 Principle: security-review guide; P5.
 
 Acceptance criteria:
+
 - `docs/security/SECURITY-REVIEW.md`: OWASP category walk with justified N/As (grep pasted),
   positive findings, findings in the standard format with attack scenarios, endpoint x role
   matrix, time-windowed priorities, readiness ledger (blocks deployment / before deployment),

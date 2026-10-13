@@ -9,7 +9,7 @@ domain type. `AppHost` declares the system: one PostgreSQL, the partner simulato
 
 ## A payment's life
 
-```
+```text
 POST /payments            Initiated      ledger: customer-funds → pending-outbound     outbox: PaymentInitiated
 POST /payments/{id}/submit
    status committed first  Submitted                                                    outbox: PaymentSubmitted
@@ -33,18 +33,18 @@ POST /reconciliation/runs/{date}
 
 1. **Submitted is committed before the partner call.** A crash between the commit and the
    response leaves a payment at Submitted, which is the state that means "ask before you act".
-2. **An unknown outcome is never retried.** Timeouts, dropped connections and 5xx after the body
+1. **An unknown outcome is never retried.** Timeouts, dropped connections and 5xx after the body
    was sent all map to `SubmitOutcome.Unknown`. The HTTP resilience pipeline retries `GET` only.
-3. **Resubmission needs the partner's word.** Only `PartnerStatus.NotFound` allows a second
+1. **Resubmission needs the partner's word.** Only `PartnerStatus.NotFound` allows a second
    submit, and it carries the same end-to-end id so a late-arriving first attempt is a duplicate
    the partner can detect.
-4. **The ledger is append-only and balanced.** A `JournalEntry` that does not balance per
+1. **The ledger is append-only and balanced.** A `JournalEntry` that does not balance per
    currency cannot be constructed. Balances are sums, never columns.
-5. **Events go through the outbox, notifications through the inbox.** Publishing is at least
+1. **Events go through the outbox, notifications through the inbox.** Publishing is at least
    once; consumers dedupe on the message id.
-6. **Reconciliation produces breaks, not alerts.** Three kinds, each with the two amounts, so the
+1. **Reconciliation produces breaks, not alerts.** Three kinds, each with the two amounts, so the
    person working the queue has what they need on the row.
-7. **Scheme rules are data.** Cut-off, currency and settlement days per scheme live in
+1. **Scheme rules are data.** Cut-off, currency and settlement days per scheme live in
    `scenarios/schemes.yaml`; code reads them.
 
 ## Persistence

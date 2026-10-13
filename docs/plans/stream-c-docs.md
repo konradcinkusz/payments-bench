@@ -51,9 +51,9 @@ argument and are written by the lead, not delegated.
 
 1. The overview PDF is built on demand, on pull requests that touch its sources, and on `v*`
    tags as a release asset; never committed.
-2. The site is generated from one source and one facts file by a dependency-free script whose
+1. The site is generated from one source and one facts file by a dependency-free script whose
    `--check` mode fails CI when the committed page is stale; it is not hand-maintained.
-3. The site loads no external resource and carries a Content-Security-Policy that allows
+1. The site loads no external resource and carries a Content-Security-Policy that allows
    nothing but its own inline style by hash.
 
 ## Findings
