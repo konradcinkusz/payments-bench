@@ -7,15 +7,30 @@ flowchart TB
     end
 
     subgraph D["OutboxDispatcher (PostgreSQL mode only)"]
-        POLL["every 2 s: take up to 100 undispatched<br/>messages, oldest OccurredAt first"]
-        PUB["IEventPublisher.PublishAsync"]
-        MARK["set DispatchedAt, SaveChangesAsync"]
-        POLL --> PUB --> MARK
+        GATE["MigrationGate.WaitAsync<br/>no batch before the schema is ready"]
+        POLL["every 2 s: OutboxBatchDispatcher.DispatchBatchAsync<br/>up to 100 undispatched messages, oldest OccurredAt first"]
+        PUB["IEventPublisher.PublishAsync<br/>chosen by Outbox:Publisher"]
+        MARK["set DispatchedAt, SaveChangesAsync<br/>after the publish returned"]
+        GATE --> POLL --> PUB --> MARK
     end
 
     OB --> POLL
-    PUB --> LOG["LoggingEventPublisher: a log line today<br/>no broker wired, register R5"]
-    MARK -. "a crash before this line<br/>republishes the message:<br/>at least once" .-> POLL
+    PUB -- "log (default)" --> LOG["LoggingEventPublisher: a log line<br/>nothing consumes it"]
+    PUB -- "channel" --> CH["ChannelEventPublisher<br/>bounded in-process channel, not durable<br/>stands in for a broker"]
+    MARK -. "a crash before this line<br/>republishes the message with the same id:<br/>at least once" .-> POLL
+
+    subgraph DC["Consumer, Outbox:Publisher = channel only"]
+        DEDUP{"DedupingConsumer<br/>IProcessedMessageStore.Contains<br/>message id = outbox row id"}
+        HAND["IOutboxMessageHandler.HandleAsync<br/>then the id is recorded"]
+        DROP["duplicate dropped and counted<br/>DuplicatesDropped"]
+        DEDUP -- "new" --> HAND
+        DEDUP -- "seen" --> DROP
+    end
+
+    CH --> DEDUP
+    NOBROKER["No broker has carried an event:<br/>register R5 is narrowed, not closed"]
+    LOG -.-> NOBROKER
+    CH -.-> NOBROKER
 
     subgraph I["Read side: POST /partner/notifications"]
         N["PartnerNotification<br/>NotificationId, EndToEndId, Kind"]

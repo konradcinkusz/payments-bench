@@ -1,22 +1,25 @@
 flowchart TB
     RUN["POST /reconciliation/runs/date<br/>ReconciliationService.ReconcileAsync"]
-    ST["statement for the value date<br/>IStatementSource.GetAsync<br/>from the partner simulator (simulated bank)<br/>GET /statements/date"]
-    SP["settled payments with that value date<br/>IPaymentRepository.ListByStatusAsync Settled<br/>filtered on ValueDate"]
+    ST["statement for the value date<br/>IStatementSource.GetAsync (HttpStatementSource)<br/>from the partner simulator (simulated bank)<br/>GET /statements/date"]
+    FMT["Partner:StatementFormat<br/>json (default) or camt053<br/>camt.053 is read by PaymentsBench.Iso20022"]
+    SP["payments settled on that value date<br/>IPaymentRepository.ListByStatusAsync<br/>Settled plus Returned, filtered on ValueDate<br/>a later return does not move the settlement day (F-4 fixed)"]
 
     RUN --> ST
+    FMT -.-> ST
     RUN --> SP
     ST --> DEB["Debit lines only, matched by end-to-end id"]
     SP --> DEB
 
-    DEB --> Q1{"statement line has a<br/>settled payment?"}
+    DEB --> Q1{"statement line has a<br/>payment settled that day?"}
     Q1 -- "no" --> B1["break OnStatementOnly<br/>StatementAmount set, LedgerAmount empty"]
     Q1 -- "yes" --> Q2{"same amount<br/>and currency?"}
     Q2 -- "no" --> B3["break AmountMismatch<br/>both amounts on the row"]
     Q2 -- "yes" --> M["matched, counted"]
-    DEB --> Q3{"settled payment missing<br/>from the statement?"}
+    DEB --> Q3{"payment settled that day<br/>missing from the statement?"}
     Q3 -- "yes" --> B2["break InLedgerOnly<br/>LedgerAmount set, StatementAmount empty"]
 
     B1 --> WQ["ReconciliationReport: Matched count<br/>plus Breaks, a work queue and not an alert"]
     B2 --> WQ
     B3 --> WQ
     M --> WQ
+    WQ -.-> R18["Not proved, register R18: a return has no<br/>statement line of its own, so the return day<br/>cannot reconcile"]

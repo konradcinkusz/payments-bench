@@ -15,7 +15,7 @@
 
 <div class="cards cards-3">
 <article class="card"><h3>Exactly once</h3><p>The same request twice is one payment; the same key with a different body is a <code>409</code>, not a second transfer. Submitted is committed before the partner call, so a crash leaves evidence.</p><span class="src">README.md · InitiatePaymentHandler</span></article>
-<article class="card"><h3>Honest about the unknown</h3><p>A timeout after the body went out is an unknown outcome. Nothing retries it; the resolver asks the partner by end-to-end id and resubmits only when the partner has no record.</p><span class="src">docs/adr/0001-no-blind-resubmit.md</span></article>
+<article class="card"><h3>Honest about the unknown</h3><p>A timeout after the body went out is an unknown outcome. Nothing retries it; the resolver, on request or from the scheduled sweep, asks the partner by end-to-end id and resubmits only when the partner has no record.</p><span class="src">docs/adr/0001-no-blind-resubmit.md · SubmittedPaymentSweeper</span></article>
 <article class="card"><h3>Rules as data</h3><p>Cut-off time and settlement days per scheme, and every fault scenario, are files under <code>scenarios/</code>, never branches in code.</p><span class="src">scenarios/schemes.yaml</span></article>
 </div>
 
@@ -120,13 +120,13 @@
 <figcaption>Every allowed move, exactly as enumerated in <code>PaymentTransitions</code>; the aggregate consults the table before each move and a failure carries a reason code. <code>Rejected</code> and <code>Returned</code> accept nothing further. Source: src/PaymentsBench.Domain/Payments/PaymentTransitions.cs.</figcaption></figure>
 
 <h3>Submit, unknown, resolve</h3>
-<figure class="fig"><div class="fig-scroll" tabindex="0"><svg class="dg" viewBox="0 0 1000 790" role="img" aria-label="Sequence. SubmitPaymentHandler commits Submitted to the store, then calls HttpPartnerGateway, which posts to the simulated partner. The partner records the transfer but the response is lost, so the gateway returns SubmitOutcome.Unknown and the payment stays Submitted. Later ResolveSubmittedPaymentHandler asks the gateway for the status by end-to-end id; the partner answers with a PartnerStatus. Only NotFound allows a resubmit, with the same end-to-end id.">
+<figure class="fig"><div class="fig-scroll" tabindex="0"><svg class="dg" viewBox="0 0 1000 975" role="img" aria-label="Sequence. SubmitPaymentHandler commits Submitted to the store, then calls HttpPartnerGateway, which posts to the simulated partner. The partner records the transfer but the response is lost, so the gateway returns SubmitOutcome.Unknown and the payment stays Submitted. Later, on request or from SubmittedPaymentSweeper through SweepSubmittedPaymentsHandler, ResolveSubmittedPaymentHandler asks the gateway for the status by end-to-end id; the partner answers with a PartnerStatus. Only NotFound allows a resubmit, with the same end-to-end id; a resubmit with no answer is StillUnknown, and Unavailable (open circuit, timeout, transport failure, 5xx) writes nothing and resubmits nothing.">
 <defs>
 <marker id="sq-n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="mk-n" d="M0,0 L10,5 L0,10 z"/></marker>
 <marker id="sq-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="mk-a" d="M0,0 L10,5 L0,10 z"/></marker>
 <marker id="sq-h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="mk-h" d="M0,0 L10,5 L0,10 z"/></marker>
 </defs>
-<path class="life" d="M100,66 L100,770"/><path class="life" d="M300,66 L300,770"/><path class="life" d="M500,66 L500,770"/><path class="life" d="M700,66 L700,770"/><path class="life" d="M900,66 L900,770"/>
+<path class="life" d="M100,66 L100,960"/><path class="life" d="M300,66 L300,960"/><path class="life" d="M500,66 L500,960"/><path class="life" d="M700,66 L700,960"/><path class="life" d="M900,66 L900,960"/>
 <rect class="b-a" x="10" y="16" width="180" height="50" rx="8"/><text class="t mono sm c" x="100" y="46">SubmitPaymentHandler</text>
 <rect class="b-n" x="210" y="16" width="180" height="50" rx="8"/><text class="t mono sm c" x="300" y="46">Store (IUnitOfWork)</text>
 <rect class="b-n" x="410" y="16" width="180" height="50" rx="8"/><text class="t mono sm c" x="500" y="46">HttpPartnerGateway</text>
@@ -154,30 +154,39 @@
 <text class="s" x="22" y="394">payment stays Submitted. No retry.</text>
 
 <line class="b-z" x1="10" y1="440" x2="990" y2="440"/>
-<text class="lbl c" x="500" y="445">later: POST /payments/{id}/resolve</text>
+<text class="lbl c" x="500" y="445">later: POST /payments/{id}/resolve, or the scheduled sweep</text>
+<rect class="b-n" x="10" y="458" width="980" height="34" rx="6"/>
+<text class="t mono sm c" x="500" y="480">SubmittedPaymentSweeper -&gt; SweepSubmittedPaymentsHandler -&gt; ResolveSubmittedPaymentHandler</text>
 
-<path class="w w-a" d="M900,490 L502,490" marker-end="url(#sq-a)"/>
-<text class="lbl c" x="700" y="483">GetStatusAsync(endToEndId)</text>
-<path class="w" d="M500,530 L698,530" marker-end="url(#sq-n)"/>
-<text class="lbl c" x="600" y="523">ask by end-to-end id</text>
-<path class="w dash" d="M698,572 L502,572" marker-end="url(#sq-n)"/>
-<text class="lbl c" x="600" y="565">PartnerStatus</text>
-<text class="s c" x="600" y="590">Accepted · Settled · Rejected · NotFound</text>
+<path class="w w-a" d="M900,540 L502,540" marker-end="url(#sq-a)"/>
+<text class="lbl c" x="700" y="533">GetStatusAsync(endToEndId)</text>
+<path class="w" d="M500,580 L698,580" marker-end="url(#sq-n)"/>
+<text class="lbl c" x="600" y="573">GET by end-to-end id</text>
+<path class="w dash" d="M698,622 L502,622" marker-end="url(#sq-n)"/>
+<text class="lbl c" x="600" y="615">PartnerStatus</text>
+<text class="s c" x="600" y="640">Accepted · Settled · Rejected · NotFound · Unavailable</text>
 
-<text class="lbl" x="14" y="620">the partner has a record</text>
-<path class="w w-a" d="M900,645 L302,645" marker-end="url(#sq-a)"/>
-<text class="lbl c" x="600" y="638">MarkAccepted | MarkSettled | MarkRejected, ledger, CommitAsync</text>
+<text class="lbl" x="14" y="668">the partner has a record</text>
+<path class="w w-a" d="M900,693 L302,693" marker-end="url(#sq-a)"/>
+<text class="lbl c" x="600" y="686">MarkAccepted | MarkSettled | MarkRejected, ledger, CommitAsync</text>
 
-<text class="lbl" x="14" y="685">NotFound: no record, so resubmit once</text>
-<path class="w w-h" d="M900,710 L502,710" marker-end="url(#sq-h)"/>
-<text class="lbl c" x="700" y="703">SubmitAsync, same end-to-end id</text>
-<path class="w w-h" d="M500,752 L698,752" marker-end="url(#sq-h)"/>
-<text class="lbl c" x="600" y="745">POST transfer (same end-to-end id)</text>
+<text class="lbl" x="14" y="733">NotFound: no record, so resubmit once</text>
+<path class="w w-h" d="M900,758 L502,758" marker-end="url(#sq-h)"/>
+<text class="lbl c" x="700" y="751">SubmitAsync, same end-to-end id</text>
+<path class="w w-h" d="M500,800 L698,800" marker-end="url(#sq-h)"/>
+<text class="lbl c" x="600" y="793">POST transfer (same end-to-end id)</text>
+<text class="s" x="520" y="830">answer: Accepted or Rejected is applied and committed</text>
+<rect class="b-h" x="520" y="842" width="470" height="34" rx="6"/>
+<text class="s" x="532" y="864">no answer: StillUnknown. Nothing written, stays Submitted.</text>
+
+<text class="lbl" x="14" y="914">Unavailable: the partner could not be asked (never NotFound)</text>
+<rect class="b-h" x="520" y="926" width="470" height="34" rx="6"/>
+<text class="s" x="532" y="948">PartnerUnavailable. Nothing written, no resubmit; asked again later.</text>
 </svg></div>
-<figcaption>An unknown outcome (timeout, dropped connection, 5xx after the body was sent) is never retried. The resolver asks the partner by end-to-end id and resubmits only on <code>PartnerStatus.NotFound</code>. The “partner” here is the simulator, started with the <code>TimeoutAfterAccept</code> fault. Sources: docs/adr/0001-no-blind-resubmit.md, src/PaymentsBench.Application/Payments/SubmitPayment.cs, src/PaymentsBench.Application/Payments/ResolveSubmittedPayment.cs.</figcaption></figure>
+<figcaption>An unknown submit outcome (timeout, dropped connection, 5xx after the body was sent) is never retried: the <code>POST</code> is sent once. The resolver asks the partner by end-to-end id and resubmits only on <code>PartnerStatus.NotFound</code>. The status <code>GET</code> is retried on a transport error, an attempt timeout or a 5xx, never on an open circuit (<code>PartnerResilience.ShouldRetry</code>); when the partner cannot be asked the gateway says <code>PartnerStatus.Unavailable</code>, which the resolver reports as <code>ResolutionOutcome.PartnerUnavailable</code>. The sweep runs the same resolver, one payment per scope. The “partner” here is the simulator, started with the <code>TimeoutAfterAccept</code> fault. Sources: docs/adr/0001-no-blind-resubmit.md, src/PaymentsBench.Application/Payments/SubmitPayment.cs, ResolveSubmittedPayment.cs, SweepSubmittedPayments.cs, src/PaymentsBench.Infrastructure/Partner/PartnerResilience.cs, src/PaymentsBench.Infrastructure/Sweeping/.</figcaption></figure>
 
 <h3>Outbox and inbox</h3>
-<figure class="fig"><div class="fig-scroll" tabindex="0"><svg class="dg" viewBox="0 0 1000 440" role="img" aria-label="Outbox: the payment row and the outbox row are written in one commit, then OutboxDispatcher publishes each message through IEventPublisher, which today writes a log line. Inbox: a partner notification is checked against IInbox by notification id; a duplicate is acknowledged and ignored, a first delivery is applied with the ledger and the outbox in one commit.">
+<figure class="fig"><div class="fig-scroll" tabindex="0"><svg class="dg" viewBox="0 0 1000 440" role="img" aria-label="Outbox: the payment row and the outbox row are written in one commit, then OutboxDispatcher publishes each message through IEventPublisher, which is a log line by default or a bounded in-process channel read by DedupingConsumer, selected by Outbox:Publisher. Inbox: a partner notification is checked against IInbox by notification id; a duplicate is acknowledged and ignored, a first delivery is applied with the ledger and the outbox in one commit.">
 <defs>
 <marker id="ob-n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="mk-n" d="M0,0 L10,5 L0,10 z"/></marker>
 <marker id="ob-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="mk-a" d="M0,0 L10,5 L0,10 z"/></marker>
@@ -191,8 +200,8 @@
 <path class="w w-a" d="M490,110 L548,110" marker-end="url(#ob-a)"/>
 <rect class="b-A" x="550" y="70" width="200" height="80" rx="8"/><text class="t mono sm c on" x="650" y="102">OutboxDispatcher</text><text class="s c on" x="650" y="122">polls every 2 s</text><text class="s c on" x="650" y="138">sets DispatchedAt after</text>
 <path class="w w-a" d="M750,110 L808,110" marker-end="url(#ob-a)"/>
-<rect class="b-z" x="810" y="70" width="180" height="80" rx="8"/><text class="t mono sm c" x="900" y="98">IEventPublisher</text><text class="s c" x="900" y="118">today: a log line</text><text class="s c" x="900" y="134">no broker (R5)</text>
-<text class="s" x="20" y="186">Publishing is at least once, so consumers dedupe on the message id.</text>
+<rect class="b-z" x="810" y="70" width="180" height="80" rx="8"/><text class="t mono sm c" x="900" y="98">IEventPublisher</text><text class="s c" x="900" y="118">log or channel</text><text class="s c" x="900" y="134">no broker yet (R5)</text>
+<text class="s" x="20" y="180">Publishing is at least once, so consumers dedupe on the message id. With Outbox:Publisher=channel,</text><text class="s" x="20" y="198">DedupingConsumer drops a repeated id and counts it; the channel is in process and not durable.</text>
 
 <line class="b-z" x1="10" y1="212" x2="990" y2="212"/>
 <text class="hdr" x="20" y="244">inbox · notifications arrive at least once</text>
@@ -208,13 +217,13 @@
 <path class="w w-ok" d="M770,302 L828,302" marker-end="url(#ob-ok)"/>
 <rect class="b-ok" x="830" y="262" width="160" height="80" rx="8"/><text class="t sm c" x="910" y="288">one commit</text><text class="s c" x="910" y="308">status, ledger entry,</text><text class="s c" x="910" y="324">outbox row</text>
 </svg></div>
-<figcaption>Events leave through <code>IOutbox</code> and nowhere else; partner notifications are deduplicated by id in <code>IInbox</code>. The dispatcher publishes to a log line today, so at-least-once delivery to a real consumer is a design claim until register row R5 closes. Sources: src/PaymentsBench.Infrastructure/Outbox/OutboxDispatcher.cs, src/PaymentsBench.Application/Payments/ApplyPartnerNotification.cs.</figcaption></figure>
+<figcaption>Events leave through <code>IOutbox</code> and nowhere else; partner notifications are deduplicated by id in <code>IInbox</code>. <code>Outbox:Publisher</code> selects a log line (the default) or an in-process channel whose <code>DedupingConsumer</code> applies each message id once. The contract is tested in process; no broker has carried an event, so register row R5 is narrowed, not closed. Sources: src/PaymentsBench.Infrastructure/Outbox/OutboxDispatcher.cs, OutboxRegistration.cs, DedupingConsumer.cs, src/PaymentsBench.Application/Payments/ApplyPartnerNotification.cs.</figcaption></figure>
 
 <h3>The seven rules that matter</h3>
 <div class="cards cards-2">
 <article class="card"><h3>1. Submitted is committed before the partner call</h3><p>A crash between the commit and the response leaves a payment at Submitted: the state that means “ask before you act”.</p></article>
-<article class="card"><h3>2. An unknown outcome is never retried</h3><p>Timeouts, dropped connections and 5xx after the body was sent map to <code>SubmitOutcome.Unknown</code>. The HTTP resilience pipeline retries <code>GET</code> only.</p></article>
-<article class="card"><h3>3. Resubmission needs the partner’s word</h3><p>Only <code>PartnerStatus.NotFound</code> allows a second submit, with the same end-to-end id.</p></article>
+<article class="card"><h3>2. An unknown outcome is never retried</h3><p>Timeouts, dropped connections and 5xx after the body was sent map to <code>SubmitOutcome.Unknown</code>. The HTTP resilience pipeline retries a <code>GET</code> on a transport error, an attempt timeout or a 5xx; never a <code>POST</code>, never an open circuit.</p></article>
+<article class="card"><h3>3. Resubmission needs the partner’s word</h3><p>Only <code>PartnerStatus.NotFound</code> allows a second submit, with the same end-to-end id. A partner that cannot be asked is <code>PartnerStatus.Unavailable</code>, not <code>NotFound</code>.</p></article>
 <article class="card"><h3>4. The ledger is append-only and balanced</h3><p>A <code>JournalEntry</code> that does not balance per currency cannot be constructed. Balances are sums, never columns.</p></article>
 <article class="card"><h3>5. Outbox out, inbox in</h3><p>Publishing is at least once; consumers dedupe on the message id.</p></article>
 <article class="card"><h3>6. Reconciliation produces breaks, not alerts</h3><p>Three kinds, each with the two amounts, so the person working the queue has what they need on the row (ADR 0003).</p></article>
@@ -227,7 +236,7 @@
 <p class="eyebrow">faults and schemes as data</p>
 <h2>The scenarios</h2>
 <p class="lede">Each file under <code>scenarios/</code> describes one thing the rail must survive: the fault the simulated partner injects, the calls made, and the state the system must end in.</p>
-<p class="note"><strong>A specification, not yet an executed suite.</strong> The files are parsed by <code>ScenarioFilesTests</code>; no runner drives them end to end. This is register row R3, quoted in full below.</p>
+<p class="note"><strong>An executed suite, in process.</strong> <code>tests/PaymentsBench.Scenarios</code> runs every file end to end against the API and the simulated partner, in memory and on PostgreSQL; no process boundary or real clock is exercised. Register row R3 is closed, quoted in the Closed table below.</p>
 {{scenarios}}
 <p class="src">scenarios/*.yaml · {{count:scenarios}} files, parsed by the site generator</p>
 <h3>Scheme rules</h3>
@@ -259,7 +268,7 @@
 <ol class="steps">
 <li><p>Run the tests. {{tests-total}} tests.</p><pre class="code">dotnet test</pre><span class="src">README.md</span> <span class="src">{{tests-caption}} · {{tests-as-of}}</span></li>
 <li><p>Start the simulated partner and the API, in two terminals.</p><pre class="code">dotnet run --project src/PaymentsBench.PartnerSimulator   # http://localhost:5101
-dotnet run --project src/PaymentsBench.Api                # http://localhost:5100</pre><p class="muted">Or, with Aspire (PostgreSQL, simulator, API, dashboard): <code>dotnet run --project src/PaymentsBench.AppHost</code></p></li>
+dotnet run --project src/PaymentsBench.Api                # http://localhost:5100</pre><p class="muted">Or, with Aspire (PostgreSQL, simulator, API, dashboard, and authservice when a signing key is configured): <code>dotnet run --project src/PaymentsBench.AppHost</code></p></li>
 <li><p>Initiate and submit a transfer. The <code>Idempotency-Key</code> header is required.</p><pre class="code">curl -X POST localhost:5100/payments -H 'Content-Type: application/json' -H 'Idempotency-Key: demo-1' \
   -d '{"endToEndId":"E2E-1","amount":100.00,"currency":"EUR","debtorAccount":"DE89...","creditorAccount":"GB33...","scheme":"sepa"}'
 curl -X POST localhost:5100/payments/&lt;id&gt;/submit</pre></li>
