@@ -1,0 +1,24 @@
+# Real attributes, not the stock template (repo-baseline section 1).
+
+# Normalise line endings on the way in; check out LF everywhere. A CRLF in a shell script
+# fails with an unreadable "bad interpreter" error.
+* text=auto eol=lf
+
+*.sh     text eol=lf
+*.cs     text eol=lf diff=csharp
+*.csproj text eol=lf
+*.props  text eol=lf
+*.sln    text eol=lf
+*.json   text eol=lf
+*.yml    text eol=lf
+*.yaml   text eol=lf
+*.md     text eol=lf diff=markdown
+*.toml   text eol=lf
+
+*.png    binary
+*.jpg    binary
+*.pdf    binary
+
+# Lockfiles and generated output: collapse in diffs.
+packages.lock.json linguist-generated=true
+docs/**            linguist-documentation=true
