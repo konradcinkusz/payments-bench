@@ -269,7 +269,7 @@ figure.fig figcaption { font-size: 13.5px; color: var(--muted); padding: 6px 4px
 <p class="note"><strong>The partner bank is simulated.</strong> Nothing in this repository has talked to a real bank. The partner is <code>src/PaymentsBench.PartnerSimulator</code>, and its API shape is invented (register row R1, below).</p>
 
 <div class="stat-row">
-<div class="stat"><span class="big-num">152</span><p>tests</p><span class="src">30 in tests/PaymentsBench.Domain.Tests + 46 in tests/PaymentsBench.Application.Tests + 36 in tests/PaymentsBench.Integration.Tests + 40 in tests/PaymentsBench.Api.Tests · as of 2026-10-13</span></div>
+<div class="stat"><span class="big-num">155</span><p>tests</p><span class="src">30 in tests/PaymentsBench.Domain.Tests + 46 in tests/PaymentsBench.Application.Tests + 36 in tests/PaymentsBench.Integration.Tests + 43 in tests/PaymentsBench.Api.Tests · as of 2026-10-13</span></div>
 <div class="stat"><span class="big-num">6</span><p>payment states, every allowed move in one table</p><span class="src">src/PaymentsBench.Domain/Payments/PaymentTransitions.cs</span></div>
 <div class="stat"><span class="big-num">3</span><p>ledger accounts</p><span class="src">src/PaymentsBench.Domain/Ledger/LedgerAccounts.cs</span></div>
 <div class="stat"><span class="big-num">7</span><p>fault scenarios, as data</p><span class="src">scenarios/*.yaml</span></div>
@@ -562,7 +562,7 @@ figure.fig figcaption { font-size: 13.5px; color: var(--muted); padding: 6px 4px
 <h2>Run it</h2>
 <p class="lede">No bank is involved: the partner is the simulator. Without a <code>payments</code> connection string the service runs in memory and says so in its log.</p>
 <ol class="steps">
-<li><p>Run the tests. 152 tests.</p><pre class="code">dotnet test</pre><span class="src">README.md</span> <span class="src">30 in tests/PaymentsBench.Domain.Tests + 46 in tests/PaymentsBench.Application.Tests + 36 in tests/PaymentsBench.Integration.Tests + 40 in tests/PaymentsBench.Api.Tests · 2026-10-13</span></li>
+<li><p>Run the tests. 155 tests.</p><pre class="code">dotnet test</pre><span class="src">README.md</span> <span class="src">30 in tests/PaymentsBench.Domain.Tests + 46 in tests/PaymentsBench.Application.Tests + 36 in tests/PaymentsBench.Integration.Tests + 43 in tests/PaymentsBench.Api.Tests · 2026-10-13</span></li>
 <li><p>Start the simulated partner and the API, in two terminals.</p><pre class="code">dotnet run --project src/PaymentsBench.PartnerSimulator   # http://localhost:5101
 dotnet run --project src/PaymentsBench.Api                # http://localhost:5100</pre><p class="muted">Or, with Aspire (PostgreSQL, simulator, API, dashboard): <code>dotnet run --project src/PaymentsBench.AppHost</code></p></li>
 <li><p>Initiate and submit a transfer. The <code>Idempotency-Key</code> header is required.</p><pre class="code">curl -X POST localhost:5100/payments -H 'Content-Type: application/json' -H 'Idempotency-Key: demo-1' \
