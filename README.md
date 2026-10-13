@@ -24,7 +24,8 @@ bench, not a product: the bank is simulated, the schemes are data, and a registe
 | Degraded storage | `InfrastructureRegistration` | No connection string: the service runs in memory and says so in the log, instead of refusing to start. |
 
 Observability: one OpenTelemetry trace per request, a `payments.transitions` counter tagged by
-status, `/health` and `/alive`, OTLP export when `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
+status, `/health` and `/alive`, OTLP export when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, an opt-in `/metrics`
+and a provisioned Grafana dashboard (see [`docs/ops/`](docs/ops/README.md)).
 
 ## The numbers
 
