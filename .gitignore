@@ -10,3 +10,19 @@ coverage/
 *.log
 .env
 .env.*
+
+node_modules/
+
+# LaTeX build output
+docs/papers/*.pdf
+docs/papers/*.aux
+docs/papers/*.log
+docs/papers/*.out
+docs/papers/*.toc
+docs/papers/*.fdb_latexmk
+docs/papers/*.fls
+docs/papers/*.synctex.gz
+docs/papers/*.nav
+docs/papers/*.snm
+docs/papers/*.vrb
+docs/diagrams/rendered/
