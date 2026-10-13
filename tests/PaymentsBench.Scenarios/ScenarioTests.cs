@@ -12,7 +12,7 @@ public class ScenarioTests(ITestOutputHelper output)
 
     public static bool PostgresConfigured => !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(PostgresVariable));
 
-    public static string ScenarioDirectory => Path.Combine(AppContext.BaseDirectory, "scenarios");
+    public static string ScenarioDirectory => Path.Join(AppContext.BaseDirectory, "scenarios");
 
     public static IEnumerable<string> ScenarioFileNames() =>
         Directory.GetFiles(ScenarioDirectory, "*.yaml", SearchOption.TopDirectoryOnly)
@@ -39,7 +39,7 @@ public class ScenarioTests(ITestOutputHelper output)
     [MemberData(nameof(Cases))]
     public async Task Scenario_runs_end_to_end(string file, string storage)
     {
-        var scenario = ScenarioDefinition.Load(Path.Combine(ScenarioDirectory, file));
+        var scenario = ScenarioDefinition.Load(Path.Join(ScenarioDirectory, file));
         await ScenarioRunner.RunAsync(scenario, Enum.Parse<StorageKind>(storage));
     }
 

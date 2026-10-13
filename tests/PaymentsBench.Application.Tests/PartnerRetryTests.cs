@@ -73,7 +73,7 @@ public class PartnerRetryTests
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["Schemes:Directory"] = Path.Combine(AppContext.BaseDirectory, "scenarios"),
+            ["Schemes:Directory"] = Path.Join(AppContext.BaseDirectory, "scenarios"),
             ["ConnectionStrings:payments"] = string.Empty,
         }).Build();
         var services = new ServiceCollection();

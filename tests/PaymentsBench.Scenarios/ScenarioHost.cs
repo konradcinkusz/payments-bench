@@ -95,7 +95,7 @@ public sealed class ScenarioHost : IAsyncDisposable
     private async Task WaitUntilHealthyAsync()
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
-        var last = "no response";
+        string last;
         while (true)
         {
             var response = await Api.GetAsync("/health", timeout.Token);
