@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\PaymentsBench.Iso20022\PaymentsBench.Iso20022.csproj" />
+    <ProjectReference Include="..\..\src\PaymentsBench.Infrastructure\PaymentsBench.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\PaymentsBench.PartnerSimulator\PaymentsBench.PartnerSimulator.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="samples\*.xml" Link="samples\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+</Project>

@@ -94,6 +94,8 @@ public static class InfrastructureRegistration
                 options.CircuitBreaker.MinimumThroughput = 10;
             });
 
+        // The statement format is configuration with a default (P5); a value we do not know stops start-up.
+        services.AddSingleton(PartnerStatementSettings.From(configuration[PartnerStatementSettings.ConfigurationKey]));
         services.AddHttpClient<IStatementSource, HttpStatementSource>(client =>
             client.BaseAddress = new Uri(partnerBaseAddress));
 
