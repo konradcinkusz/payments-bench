@@ -509,8 +509,9 @@ What would have to change before this moved anyone's money, from the open rows o
   actions and no record of who did what (R24), and hostile input is only partly bounded (R25).
 - **The partner webhook trusts a bearer token**, not a partner signature (R13).
 - **No broker has carried an event** (R5); the outbox contract is proved in process only.
-- **The load numbers are in memory, on one instance, anonymous** (R15), and have not been re-run
-  since the F-9 fix.
+- **The load numbers are in memory, on one instance, anonymous** (R15). The repeat after the F-9
+  fix passed every threshold (`load.yml` run 38446330396), but says nothing about PostgreSQL, the
+  authenticated path or more than one instance.
 - **The sweep is proved in process, and its alert is prose** (R17). **The computed value date is not
   stamped on the payment** (R11). **A return day cannot reconcile** (R18). **A concurrent duplicate
   initiate answers 409, not the original 201** (R19). **The integration fixture's Docker fallback and
