@@ -1,10 +1,10 @@
-# ADR 0014: Scoped grants for the partner webhook and the back-office reads; no anonymous mode on Fly; a request-size cap
+# ADR 0016: Scoped grants for the partner webhook and the back-office reads; no anonymous mode on Fly; a request-size cap
 
-**Status:** accepted, 2026-10-13; amends ADR 0008 (decision 2: `/partner/notifications` no longer falls under the fallback policy)
+**Status:** accepted, 2026-10-13; amends ADR 0015 (decision 2: `/partner/notifications` no longer falls under the fallback policy)
 
 ## Context
 
-ADR 0008 made every endpoint require an authenticated user and left the rest to ownership checks
+ADR 0015 made every endpoint require an authenticated user and left the rest to ownership checks
 that do not exist yet. The security review ([`docs/security/SECURITY-REVIEW.md`](../security/SECURITY-REVIEW.md))
 found that "authenticated" is not enough for three groups of endpoints:
 
@@ -25,7 +25,7 @@ found that "authenticated" is not enough for three groups of endpoints:
    authenticated user. A grant is a `role` or `roles` claim value, or one value of the
    space-separated `scope` or `scp` claim: the token's shape is the identity provider's choice and
    cannot be read from this repository, so both shapes are accepted. Claim names are as issued
-   (inbound claim mapping is off, ADR 0008).
+   (inbound claim mapping is off, ADR 0015).
 1. **The names are configuration.** `Auth:Grants:PartnerNotifications` and `Auth:Grants:Operations`
    rename the grants without a code change; unset or blank means the defaults above.
 1. **Applied as groups in `UsePaymentsApi`**, around the endpoint maps, not as attributes on the

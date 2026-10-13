@@ -1,6 +1,6 @@
-# ADR 0008: Identity via authservice JWKS; anonymous only in Development
+# ADR 0015: Identity via authservice JWKS; anonymous only in Development
 
-**Status:** accepted, 2026-10-13
+**Status:** accepted, 2026-10-13; decision 2's clause on `/partner/notifications` is amended by ADR 0016
 
 ## Context
 

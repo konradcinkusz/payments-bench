@@ -21,7 +21,7 @@
 1. Read every route, the identity wiring, the exception handler, ServiceDefaults, the infrastructure stores, both Dockerfiles and every workflow; then the deployment slice and the load slice once they merged.
 1. Walked the OWASP categories in section 3. Every "not applicable" carries the `git grep` that proves it, run on this tree, command and output pasted. Where a grep returns nothing, the scope count at the top of section 3 shows the search is not empty, and for SQL a positive control shows the persistence layer is inside it.
 1. Wrote the endpoint x grant matrix (section 6) from the route table and the policy registration, not from the README.
-1. Tried the claims. A throwaway run of the real API (Production shape, a test-held JWKS, two callers `alice` and `bob`) produced the evidence quoted in SEC-01, SEC-05 and SEC-09 (re-run after the concurrency slice merged). A real Kestrel on loopback produced the 413 in SEC-07. `dotnet list package --vulnerable --include-transitive` against nuget.org reported none for any of the twelve projects. The integration suite was not run (it needs Docker; CI runs it).
+1. Tried the claims. A throwaway run of the real API (Production shape, a test-held JWKS, two callers `alice` and `bob`) produced the evidence quoted in SEC-01, SEC-05 and SEC-09 (re-run after the concurrency slice merged). A real Kestrel on loopback produced the 413 in SEC-07. `dotnet list package --vulnerable --include-transitive` against nuget.org reported none for any of the fifteen projects. The integration suite was not run (it needs Docker; CI runs it).
 1. Fixed what is small and in stream B's files (section 9); recorded the rest (register rows, ledger).
 
 The method's own caveat applies: reviews are point-in-time. The continuous complement is already in the tree and is listed under positive findings: CodeQL, gitleaks over full history, Dependabot.
@@ -34,7 +34,7 @@ Search scope for every `src/*.cs` grep below:
 
 ```text
 $ git ls-files 'src/*.cs' | wc -l
-78
+89
 ```
 
 ### 3.1 OWASP Top 10 (2021)
@@ -43,7 +43,7 @@ $ git ls-files 'src/*.cs' | wc -l
 |---|---|---|
 | A01 Broken Access Control | **Findings** | SEC-01, 02, 04, 05, 11; deny-by-default is clean (P-1) |
 | A02 Cryptographic Failures | Clean, partly N/A | TLS terminates at Fly's proxy (SEC-16 for the residue); JWT in P-2; hashing and passwords N/A (3.3) |
-| A03 Injection | Clean, N/A for four sub-classes | SQL, OS command, XML/XXE and XSS are N/A with greps in 3.3 |
+| A03 Injection | Clean, N/A for three sub-classes | SQL, OS command and XSS are N/A with greps in 3.3; XML/XXE became applicable with the ISO 20022 slice and is clean (P-12) |
 | A04 Insecure Design | **Findings** | SEC-01, 05, 08, 09 (no owner, no throttle, global identifiers) |
 | A05 Security Misconfiguration | **Findings** | SEC-06, 07, 13, 16; positives P-3, P-6, P-7 |
 | A06 Vulnerable and Outdated Components | Clean | `dotnet list package --vulnerable` reports none; Dependabot and CodeQL present (P-9); image and action pins in SEC-15 |
@@ -92,20 +92,23 @@ $ git grep -nE 'Process\.Start|ProcessStartInfo|Runtime\.Exec' -- 'src/*.cs'
 
 *If one is ever added:* no shell, an argument list not a string, an allow-list for the executable, no caller input in arguments.
 
-**XML and XXE (A03).** No XML is read or written; the one structured-data format loaded from disk is YAML (scheme and calendar data), read from files in the image.
+**XML and XXE (A03): applicable, reviewed, clean.** This was a justified N/A when the review began (the one structured format loaded was YAML). The ISO 20022 slice (PR #24, R2 closed) added `POST /payments/pain001` and a `camt.053` reader, so XML is now parsed and the category moved from N/A to a positive finding (P-12). The only door into the parser is `SecureXml`, which refuses a DTD outright, attaches no resolver, caps entity expansion at zero characters and bounds the size before the parser sees a byte:
 
 ```text
-$ git grep -nE 'XmlReader|XmlDocument|XDocument|XmlSerializer|DtdProcessing|XslCompiledTransform' -- 'src/*.cs'
-(no output)
+$ git grep -nE 'DtdProcessing|XmlResolver|MaxCharactersFromEntities|MaxCharactersInDocument' -- 'src/*.cs'
+src/PaymentsBench.Iso20022/SecureXml.cs:52:            DtdProcessing = DtdProcessing.Prohibit,
+src/PaymentsBench.Iso20022/SecureXml.cs:53:            XmlResolver = null,
+src/PaymentsBench.Iso20022/SecureXml.cs:54:            MaxCharactersInDocument = maxBytes,
+src/PaymentsBench.Iso20022/SecureXml.cs:55:            MaxCharactersFromEntities = 0,
 ```
 
-*If XML is ever added:* `XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null }`. Register R2 (ISO 20022) is the PR that will make this false, because `pain.001` and `camt.053` are XML.
+*Keep it that way:* nothing may call `XDocument.Load`/`XmlReader.Create` except through `SecureXml`; a test for the file-entity and entity-expansion cases already exists (`Pain001Tests`, `Camt053Tests`, `Pain001EndpointTests`).
 
 **Cross-site scripting and HTML rendering (A03).** The API produces JSON and `application/problem+json` only; it renders no HTML, serves no static files, has no Razor and no redirects. There is no frontend in the repository: the only TypeScript is the Playwright suite under `tests/PaymentsBench.E2E`, which drives the API and the generated documentation page from outside, and is excluded from the listing below.
 
 ```text
 $ git grep -nE 'Results\.(Content|Text|File|Redirect)|LocalRedirect|text/html|AddRazor|AddControllers|UseStaticFiles|UseFileServer|PhysicalFile|IFormFile' -- 'src/*.cs'
-(no output)
+src/PaymentsBench.PartnerSimulator/Program.cs:116:        return Results.Content(StatementXml.Render(date, "NOSTRO-SIM", lines.Select(l => (l.endToEndId, l.amount, l.currency, l.direction))), StatementXml.MediaType);
 ```
 
 ```text
@@ -145,7 +148,7 @@ src/PaymentsBench.Domain/Ledger/Postings.cs:23:        Guid.NewGuid(),
 src/PaymentsBench.Domain/Ledger/Postings.cs:33:        Guid.NewGuid(),
 src/PaymentsBench.Domain/Ledger/Postings.cs:43:        Guid.NewGuid(),
 src/PaymentsBench.Infrastructure/Persistence/EfCoreStores.cs:237:            Id = Guid.NewGuid(),
-src/PaymentsBench.PartnerSimulator/Program.cs:55:    var transfer = transfers.GetOrAdd(request.EndToEndId, id => new SimulatedTransfer(id, $"PTR-{Guid.NewGuid():N}"[..12], request.Amount, request.Currency, "Accepted", null, null));
+src/PaymentsBench.PartnerSimulator/Program.cs:56:    var transfer = transfers.GetOrAdd(request.EndToEndId, id => new SimulatedTransfer(id, $"PTR-{Guid.NewGuid():N}"[..12], request.Amount, request.Currency, "Accepted", null, null));
 ```
 
 *Not verifiable from this repository:* authservice's password-hashing parameters and whether it allows open self-registration. Both are recorded under SEC-03 as things to look at on the authservice side before deployment; recording "the framework default" is not a review.
@@ -154,7 +157,7 @@ src/PaymentsBench.PartnerSimulator/Program.cs:55:    var transfer = transfers.Ge
 
 ```text
 $ git grep -nE 'File\.|Directory\.|FileStream|StreamReader|Path\.' -- 'src/PaymentsBench.Api/*.cs' 'src/PaymentsBench.Application/*.cs' 'src/PaymentsBench.Domain/*.cs'
-(no output)
+src/PaymentsBench.Api/Errors/ProblemDetailsExceptionHandler.cs:25:        if (exception is MessageFormatException { ElementPath.Length: > 0 } format)
 ```
 
 **SSRF (A10, API7).** The only outbound HTTP is to the partner. Its base address comes from configuration (`Partner:BaseAddress`), and the caller-supplied end-to-end id is path-escaped (`Uri.EscapeDataString`) and sent as a relative URI, so it cannot change the host. This is *clean* rather than N/A: the sites are listed so the next reviewer does not redo it.
@@ -164,13 +167,13 @@ $ git grep -nE 'HttpClient|BaseAddress|PostAsJsonAsync|GetFromJsonAsync|client\.
 src/PaymentsBench.Infrastructure/InfrastructureRegistration.cs:76:        var partnerBaseAddress = configuration["Partner:BaseAddress"] ?? "http://partner";
 src/PaymentsBench.Infrastructure/InfrastructureRegistration.cs:78:        services.AddHttpClient<IPartnerGateway, HttpPartnerGateway>(PartnerClientName, client =>
 src/PaymentsBench.Infrastructure/InfrastructureRegistration.cs:80:                client.BaseAddress = new Uri(partnerBaseAddress);
-src/PaymentsBench.Infrastructure/InfrastructureRegistration.cs:97:        services.AddHttpClient<IStatementSource, HttpStatementSource>(client =>
-src/PaymentsBench.Infrastructure/InfrastructureRegistration.cs:98:            client.BaseAddress = new Uri(partnerBaseAddress));
+src/PaymentsBench.Infrastructure/InfrastructureRegistration.cs:99:        services.AddHttpClient<IStatementSource, HttpStatementSource>(client =>
+src/PaymentsBench.Infrastructure/InfrastructureRegistration.cs:100:            client.BaseAddress = new Uri(partnerBaseAddress));
 src/PaymentsBench.Infrastructure/Partner/HttpPartnerGateway.cs:15:public sealed class HttpPartnerGateway(HttpClient client) : IPartnerGateway
 src/PaymentsBench.Infrastructure/Partner/HttpPartnerGateway.cs:21:            using var response = await client.PostAsJsonAsync("/transfers", transfer, PartnerJson.Options, cancellationToken);
 src/PaymentsBench.Infrastructure/Partner/HttpPartnerGateway.cs:50:            using var response = await client.GetAsync(new Uri($"/transfers/{Uri.EscapeDataString(endToEndId)}", UriKind.Relative), cancellationToken);
-src/PaymentsBench.Infrastructure/Partner/HttpStatementSource.cs:6:public sealed class HttpStatementSource(HttpClient client) : IStatementSource
-src/PaymentsBench.Infrastructure/Partner/HttpStatementSource.cs:9:        await client.GetFromJsonAsync<Statement>(new Uri($"/statements/{statementDate:yyyy-MM-dd}", UriKind.Relative), PartnerJson.Options, cancellationToken)
+src/PaymentsBench.Infrastructure/Partner/HttpStatementSource.cs:31:public sealed class HttpStatementSource(HttpClient client, PartnerStatementSettings settings) : IStatementSource
+src/PaymentsBench.Infrastructure/Partner/HttpStatementSource.cs:36:        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri($"/statements/{statementDate:yyyy-MM-dd}", UriKind.Relative));
 ```
 
 **Mass assignment (API3).** No endpoint binds a domain type or a free-form object: bodies are the three records in `Contracts/Requests.cs`, every field named; responses are the explicit views in `Contracts/Views.cs`. The grep below finds no `[FromBody]`, no `JsonElement`/`JsonNode` and no `dynamic` in the API project.
@@ -196,7 +199,7 @@ What is solid, so the next review does not re-check it. The ones marked **(test)
 - **P-1 Deny by default, mechanically.** The fallback policy requires an authenticated user for every endpoint (`IdentityRegistration.cs:82-83`); the anonymous list is `/health`, `/alive` (`Extensions.cs:113-114`), `/metrics` when its own switch is on (`Extensions.cs:120`) and OpenAPI in Development only (`IdentityRegistration.cs:89-91`). It is short enough to read aloud. **(test)** `IdentityTests`, `MetricsEndpointTests`, and `SecurityPostureTests.A_deployed_host_answers_nothing_but_health_without_a_token`, which also covers `/swagger` and an unknown route.
 - **P-2 Token validation is strict.** RS256 only (`ValidAlgorithms`, `IdentityRegistration.cs:78`), issuer, audience, lifetime and signing key all validated (`:72-77`), metadata over HTTPS outside Development (`:60`, `:68`), inbound claim mapping off so claims keep the names the issuer chose (`:69`), and issuer and audience are mandatory whenever an authority is set so a token minted for another product is refused. The API holds no key. **(test)** wrong key, wrong audience, wrong algorithm, no token (`IdentityTests`).
 - **P-3 Fail closed on start-up.** Outside Development a missing `Auth__Authority`, `Auth__Issuer` or `Auth__Audience` stops the process naming the setting (`IdentityRegistration.cs:35`). OpenAPI is behind the token outside Development. **(test)**
-- **P-4 Error responses leak nothing.** Every error leaves as `application/problem+json`; unexpected exceptions are logged server-side and answered with a fixed text (`ProblemDetailsExceptionHandler.cs:26`); malformed JSON is answered with fixed text, not the parser's message; `/health` says only `Healthy`. **(test)** `SecurityPostureTests` (Production and Development, with a repository that throws a message containing a connection string).
+- **P-4 Error responses leak nothing.** Every error leaves as `application/problem+json`; unexpected exceptions are logged server-side and answered with a fixed text (`ProblemClassifier.cs:25`); malformed JSON is answered with fixed text, not the parser's message; `/health` says only `Healthy`. **(test)** `SecurityPostureTests` (Production and Development, with a repository that throws a message containing a connection string).
 - **P-5 No mass assignment, no excess exposure.** Request records name every field; `PaymentView` omits the debtor and creditor account numbers; outbox events carry ids, amounts, scheme and reason codes but no account numbers, so the publisher's log line (`EventPublishers.cs:22`) cannot leak them.
 - **P-6 Containers.** Both images are multi-stage, run as `USER $APP_UID` (`Dockerfile:40` / `:37`) and CI asserts the uid is not 0 (`containers.yml`, "Container does not run as root"). Nothing sensitive is baked in: the final stage copies only `/app/publish`; `.dockerignore` excludes `.env*`, `.git`, `.github`, `tests`, `docs`, `scripts`, `flyio`; the only `ENV` is `ASPNETCORE_URLS`. The published image contains the compiled service, `appsettings.json`, `appsettings.Development.json` (an empty connection string and a localhost partner address) and `scenarios/` data, all of which are in the public repository anyway. That is why the images can be public (the deploy procedure makes them public so Fly can pull from GHCR).
 - **P-7 Secrets appear only by name.** `secrets.env.example` is placeholders; `.env*` is ignored (`.gitignore:11-12`); gitleaks runs on full history on every PR, every push to `main` and weekly, with a "rotate first" failure message (`secret-scan.yml`). The pattern greps below find no credential-shaped string and no private key. In the deployment slice, secrets are GitHub environment secrets staged onto Fly by the pipeline and listed by name only; the signing key is generated once and never reused.
@@ -221,11 +224,11 @@ $ git ls-files | grep -E '(^|/)\.env' ; git check-ignore -v .env .env.local
 
 ```text
 $ git grep -nE 'Log(Information|Warning|Error|Debug|Trace)\(|LoggerMessage' -- 'src/PaymentsBench.Api/*.cs' 'src/PaymentsBench.Application/*.cs' 'src/PaymentsBench.Infrastructure/*.cs'
-src/PaymentsBench.Api/Errors/ProblemDetailsExceptionHandler.cs:45:    [LoggerMessage(Level = LogLevel.Error, Message = "Unhandled exception.")]
+src/PaymentsBench.Api/Errors/ProblemDetailsExceptionHandler.cs:39:    [LoggerMessage(Level = LogLevel.Error, Message = "Unhandled exception.")]
 src/PaymentsBench.Api/Identity/IdentityRegistration.cs:99:            logger.LogWarning("auth: {Mode}. No '{Setting}': every endpoint is open. This is allowed in Development only.", mode.Description, AuthorityKey);
 src/PaymentsBench.Api/Identity/IdentityRegistration.cs:103:            logger.LogInformation("auth: {Mode}.", mode.Description);
-src/PaymentsBench.Infrastructure/InfrastructureRegistration.cs:109:            logger.LogWarning("No '{Connection}' connection string: running DEGRADED with {Mode} storage. Nothing survives a restart.", PaymentsConnectionName, mode.Name);
-src/PaymentsBench.Infrastructure/InfrastructureRegistration.cs:113:            logger.LogInformation("Storage: {Mode}.", mode.Name);
+src/PaymentsBench.Infrastructure/InfrastructureRegistration.cs:111:            logger.LogWarning("No '{Connection}' connection string: running DEGRADED with {Mode} storage. Nothing survives a restart.", PaymentsConnectionName, mode.Name);
+src/PaymentsBench.Infrastructure/InfrastructureRegistration.cs:115:            logger.LogInformation("Storage: {Mode}.", mode.Name);
 src/PaymentsBench.Infrastructure/Outbox/DedupingConsumer.cs:35:        logger.LogInformation("Consumed {Type} {MessageId}", message.Type, message.MessageId);
 src/PaymentsBench.Infrastructure/Outbox/DedupingConsumer.cs:87:            logger.LogInformation("Dropped duplicate {Type} {MessageId}", message.Type, message.MessageId);
 src/PaymentsBench.Infrastructure/Outbox/DedupingConsumer.cs:97:            logger.LogError(ex, "Handler failed for {Type} {MessageId}; not recorded as applied.", message.Type, message.MessageId);
@@ -241,7 +244,7 @@ src/PaymentsBench.Infrastructure/Sweeping/SubmittedPaymentSweeper.cs:88:        
 src/PaymentsBench.Infrastructure/Sweeping/SubmittedPaymentSweeper.cs:93:            logger.LogInformation(
 ```
 
-- **P-9 Dependency and code scanning exist.** Dependabot for NuGet, GitHub Actions and both Dockerfiles (`.github/dependabot.yml`, weekly); CodeQL with `security-and-quality` on every PR, push and weekly (`codeql.yml`); `dotnet list package --vulnerable --include-transitive` reports no vulnerable package in any of the twelve projects today.
+- **P-9 Dependency and code scanning exist.** Dependabot for NuGet, GitHub Actions and both Dockerfiles (`.github/dependabot.yml`, weekly); CodeQL with `security-and-quality` on every PR, push and weekly (`codeql.yml`); `dotnet list package --vulnerable --include-transitive` reports no vulnerable package in any of the fifteen projects today.
 - **P-10 Workflows are written defensively.** Every workflow declares top-level `permissions`, read-only except `deploy-pages.yml` (which adds `pages: write` and `id-token: write` for the Pages deployment); other write scopes are granted per job and only where needed (`packages: write` for the image build, `security-events: write` for CodeQL, `contents: write` for the PDF release); no `pull_request_target`, no `workflow_run`, no `curl | sh`; no `${{ }}` expression from event data is spliced into a script: the six `inputs.*` uses (deploy, scale, destroy and load) are all `env:` assignments read as shell variables, so a crafted input cannot become code. flyctl is downloaded at a pinned version and verified against a SHA-256 before use, and `scripts/load-test.sh` does the same for k6.
 
 ```text
@@ -284,6 +287,7 @@ $ git grep -nE '^permissions:|^    permissions:|: write' -- .github/workflows
 .github/workflows/secret-scan.yml:24:permissions:
 ```
 
+- **P-12 XML is parsed safely (added after PR #24).** `SecureXml` is the single entry for pain.001 and camt.053: DTD prohibited, no resolver, no entity expansion, a size bound, and malformed documents answered 400 naming the element. The endpoint additionally pins its own limit (1 MiB, `Pain001Endpoints.cs`), which is the per-endpoint cap SEC-07 recommended for a body that is legitimately larger than the 64 KiB default. **(test)** file-entity and entity-bomb documents are refused in `Pain001Tests`, `Camt053Tests` and `Pain001EndpointTests`. Two small residues: a 400 detail carries the XML parser's own message (line and position; no path, since nothing is resolved), and the transaction count is bounded only by the 1 MiB size (SEC-08).
 - **P-11 The deployment topology is private where it should be (as written; nothing is deployed yet).** PostgreSQL has no `[http_service]` and no `[[services]]` and is deployed `--no-public-ips`; the partner is deployed `--no-public-ips`; `force_https = true` on the three public-capable apps; `ASPNETCORE_ENVIRONMENT = "Production"` on all four; `/metrics` is not enabled (no `Metrics__` setting). The two databases have separate roles with `REVOKE CONNECT ... FROM PUBLIC`. The post-deploy check proves a payments route answers 401 without a token, which would catch a deployment that came up open.
 
 ```text
@@ -309,12 +313,12 @@ flyio/postgres.fly.toml:18:# payments-bench-postgres.internal:5432 over 6PN. The
 ```text
 $ git grep -nE '^USER|^HEALTHCHECK|^ENV|^COPY --from|^RUN apt|^FROM' -- 'src/PaymentsBench.Api/Dockerfile' 'src/PaymentsBench.PartnerSimulator/Dockerfile'
 src/PaymentsBench.Api/Dockerfile:8:FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
-src/PaymentsBench.Api/Dockerfile:25:FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
-src/PaymentsBench.Api/Dockerfile:31:RUN apt-get update \
-src/PaymentsBench.Api/Dockerfile:36:COPY --from=build /app/publish .
-src/PaymentsBench.Api/Dockerfile:38:ENV ASPNETCORE_URLS=http://+:8080
-src/PaymentsBench.Api/Dockerfile:40:USER $APP_UID
-src/PaymentsBench.Api/Dockerfile:43:HEALTHCHECK --interval=15s --timeout=3s --start-period=20s --retries=3 \
+src/PaymentsBench.Api/Dockerfile:26:FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+src/PaymentsBench.Api/Dockerfile:32:RUN apt-get update \
+src/PaymentsBench.Api/Dockerfile:37:COPY --from=build /app/publish .
+src/PaymentsBench.Api/Dockerfile:39:ENV ASPNETCORE_URLS=http://+:8080
+src/PaymentsBench.Api/Dockerfile:41:USER $APP_UID
+src/PaymentsBench.Api/Dockerfile:44:HEALTHCHECK --interval=15s --timeout=3s --start-period=20s --retries=3 \
 src/PaymentsBench.PartnerSimulator/Dockerfile:8:FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 src/PaymentsBench.PartnerSimulator/Dockerfile:22:FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 src/PaymentsBench.PartnerSimulator/Dockerfile:28:RUN apt-get update \
@@ -352,7 +356,7 @@ Format per guide section 2: location, issue, current code, risk, attack scenario
 
 **Priority P1 · Risk Critical · FIXED in this PR (grant `payments.partner.notify`); the partner-signature half stays open as R13**
 
-- **Location:** `src/PaymentsBench.Api/Endpoints/PartnerNotificationEndpoints.cs:10` (route), `src/PaymentsBench.Application/Payments/ApplyPartnerNotification.cs` (`MarkSettled`/`MarkRejected`/`MarkReturned` plus a ledger posting each); `src/PaymentsBench.Api/ApiServiceCollectionExtensions.cs:40` (the fix).
+- **Location:** `src/PaymentsBench.Api/Endpoints/PartnerNotificationEndpoints.cs:10` (route), `src/PaymentsBench.Application/Payments/ApplyPartnerNotification.cs` (`MarkSettled`/`MarkRejected`/`MarkReturned` plus a ledger posting each); `src/PaymentsBench.Api/ApiServiceCollectionExtensions.cs:41` (the fix).
 - **Issue:** The route fell under the fallback policy (`RequireAuthenticatedUser`), so the sender needed a token but not a *particular* token. Any caller could post a settlement, rejection or return for any end-to-end id.
 - **Current code (before):**
 
@@ -388,7 +392,7 @@ Format per guide section 2: location, issue, current code, risk, attack scenario
 
 **Priority P2 · Risk High · FIXED in this PR (grant `payments.operate`)**
 
-- **Location:** `src/PaymentsBench.Api/Endpoints/LedgerEndpoints.cs:13` (entries of any payment), `:18` (balance of any account), `ReconciliationEndpoints.cs:9`; `src/PaymentsBench.Application/Reconciliation/ReconciliationService.cs:38-41` (loads every settled and returned payment); `ApiServiceCollectionExtensions.cs:41-42` (the fix).
+- **Location:** `src/PaymentsBench.Api/Endpoints/LedgerEndpoints.cs:13` (entries of any payment), `:18` (balance of any account), `ReconciliationEndpoints.cs:9`; `src/PaymentsBench.Application/Reconciliation/ReconciliationService.cs:38-41` (loads every settled and returned payment); `ApiServiceCollectionExtensions.cs:42-43` (the fix).
 - **Issue:** These are back-office functions. `GET /ledger/balances/customer-funds/EUR` is the aggregate of every customer's funds; `GET /payments/{id}/ledger` is any payment's journal; `POST /reconciliation/runs/{date}` calls the partner for a statement and loads all settled and returned payments for that date's comparison.
 - **Attack scenario:** Any token holder reads the aggregate customer balance and the movements of any payment id (ids leak through SEC-01), and calls reconciliation in a loop: each call is a partner round trip plus a full read of settled payments, an amplification against the partner and the database from one cheap request.
 - **Impact:** Disclosure of balances and movements; resource amplification.
@@ -424,7 +428,7 @@ Format per guide section 2: location, issue, current code, risk, attack scenario
 **Priority P2 · Risk High (likelihood low) · FIXED for Fly in this PR; other hosts remain**
 
 - **Location:** `src/PaymentsBench.Api/Identity/IdentityRegistration.cs:31-56`; `src/PaymentsBench.Api/Properties/launchSettings.json` (Development by default); `.github/workflows/containers.yml` runs the API image as Development on purpose; `flyio/api.fly.toml:24` pins `Production`.
-- **Issue:** The only thing separating the open mode from a deployment was the environment name (ADR 0008 states this and asks the deployment slice not to do it). Nothing enforced it.
+- **Issue:** The only thing separating the open mode from a deployment was the environment name (ADR 0015 states this and asks the deployment slice not to do it). Nothing enforced it.
 - **Attack scenario:** An operator copy-pastes an environment block from the README or the CI smoke test into `fly secrets set`/`fly machine run`, or runs `docker run -e ASPNETCORE_ENVIRONMENT=Development` on the published image, with no `Auth__Authority`. The API starts open: anyone who can reach it can initiate and submit transfers and read every payment. The deploy workflow's post-deploy check would catch it, but only after the open API has been serving traffic.
 - **Impact:** Total loss of authentication.
 - **Recommendation (done):** the anonymous branch refuses to start when `FLY_APP_NAME` is set (Fly sets it on every machine), naming both settings. `AuthorizationPolicyTests.Anonymous_mode_on_fly_refuses_to_start_even_if_the_environment_says_development`, and the converse (a configured authority on Fly starts normally).
@@ -440,15 +444,15 @@ Format per guide section 2: location, issue, current code, risk, attack scenario
 - **Attack scenario:** An authenticated caller posts a 25 MB JSON string as `endToEndId` to `POST /payments`, two hundred at a time (the proxy's soft limit is 200, `flyio/api.fly.toml:54`). Each request is buffered before validation can reject it: roughly 5 GB against a 512 MB machine, an out-of-memory kill, and every in-flight request on that machine ends in an unknown outcome (recoverable by design, but it is a self-inflicted outage for the price of one token).
 - **Impact:** Availability.
 - **Recommendation (done):** a 64 KiB default, configurable, applied to the API and the simulator through ServiceDefaults; the `Server` response header is dropped. Verified by posting 200 KB to a real Kestrel: **413** with a problem body (the test server does not enforce Kestrel limits, so the unit tests pin the configuration and this run pins the behaviour).
-- **Better:** a per-endpoint cap (`[RequestSizeLimit]`) when a larger body legitimately exists (statement upload, R2).
+- **Better:** a per-endpoint cap when a larger body legitimately exists. `POST /payments/pain001` (PR #24) now does this: it raises its own limit to 1 MiB on the request and reads through `SecureXml`.
 
 ### SEC-08 No rate limiting
 
 **Priority P2 · Risk Medium · OPEN, owner stream B · Register R23**
 
-- **Location:** absent: `src/PaymentsBench.Api/ApiServiceCollectionExtensions.cs:31-43` and the grep in section 3.3 (no `AddRateLimiter`); `flyio/api.fly.toml:50-54` limits in-flight requests (250 hard, 200 soft), not their rate.
+- **Location:** absent: `src/PaymentsBench.Api/ApiServiceCollectionExtensions.cs:31-44` and the grep in section 3.3 (no `AddRateLimiter`); `flyio/api.fly.toml:50-54` limits in-flight requests (250 hard, 200 soft), not their rate.
 - **Issue:** Nothing bounds how fast one caller may create payments, submit or resolve them, or call an endpoint that costs a partner round trip. Guide section 9 item 3 names partial or missing rate limiting as a recurring launch blocker.
-- **Attack scenario:** A token holder loops `POST /payments` with fresh keys: unbounded payments, ledger rows and outbox rows into the 3 GB PostgreSQL volume (`flyio/postgres.fly.toml:37`), or loops `POST /payments/{id}/submit` and `.../resolve` to hammer the partner. An unauthenticated caller floods any path: each costs a 401, and the proxy's concurrency limit queues legitimate requests behind them.
+- **Attack scenario:** A token holder posts one 1 MiB `pain.001` document (`POST /payments/pain001`) carrying thousands of transactions: each becomes a payment, a ledger entry and an outbox row from a single request, and the size cap is the only bound on the count. Or loops `POST /payments` with fresh keys: unbounded payments, ledger rows and outbox rows into the 3 GB PostgreSQL volume (`flyio/postgres.fly.toml:37`), or loops `POST /payments/{id}/submit` and `.../resolve` to hammer the partner. An unauthenticated caller floods any path: each costs a 401, and the proxy's concurrency limit queues legitimate requests behind them.
 - **Impact:** Storage exhaustion, partner overload, degraded service.
 - **Recommendation:** ASP.NET Core's `AddRateLimiter`: a global limiter partitioned by `sub` for authenticated requests and by the client IP (trusted `Fly-Client-IP`, via forwarded-headers configuration, SEC-16) for anonymous ones; limits and the on/off switch as configuration; 429 as problem details with `Retry-After`; separate, tighter limit on the money-moving routes.
 - **Better:** also at the edge, and on authservice's own login and token endpoints, which need their own limit (SEC-03).
@@ -459,7 +463,7 @@ Format per guide section 2: location, issue, current code, risk, attack scenario
 
 **Priority P3 · Risk Low · OPEN, owner stream A · Register R22** (re-rated from P2 after the concurrency slice, see below)
 
-- **Location:** `src/PaymentsBench.Application/Payments/InitiatePayment.cs:84-111` (no end-to-end id check in the handler); `src/PaymentsBench.Infrastructure/InMemory/InMemoryStores.cs:110-124` and `src/PaymentsBench.Infrastructure/Persistence/EfCoreStores.cs:284-288` (a duplicate idempotency key or end-to-end id becomes `ConcurrencyConflictException.Duplicate`); `PaymentsDbContext.cs:28` (the unique index); `src/PaymentsBench.PartnerSimulator/Program.cs:55` (`GetOrAdd` by end-to-end id).
+- **Location:** `src/PaymentsBench.Application/Payments/InitiatePayment.cs:84-111` (no end-to-end id check in the handler); `src/PaymentsBench.Infrastructure/InMemory/InMemoryStores.cs:110-124` and `src/PaymentsBench.Infrastructure/Persistence/EfCoreStores.cs:284-288` (a duplicate idempotency key or end-to-end id becomes `ConcurrencyConflictException.Duplicate`); `PaymentsDbContext.cs:28` (the unique index); `src/PaymentsBench.PartnerSimulator/Program.cs:56` (`GetOrAdd` by end-to-end id).
 - **What changed during this review:** when the review began, the in-memory store accepted a second payment with an existing end-to-end id (reproduced: 201, two payments sharing one id, the partner's `GetOrAdd` handing the second submit the first transfer) while PostgreSQL raised an unhandled constraint violation. The concurrency slice (R6, closed) made both stores refuse the duplicate and the exception handler answer **409**. The collision and the divergence are gone; the finding is re-rated for what is left.
 - **Issue:** The caller chooses the end-to-end id and it is unique across all callers, so a second caller's request with the same id is refused, with a message ("created concurrently. Re-read it instead of creating it again.") that is wrong for this case and tells the caller nothing about why.
 - **Attack scenario (reproduced after the fix):** Alice creates a payment with end-to-end id `E2E-A1`. Bob posts a different payment with `E2E-A1` and a new key: **409 "Concurrent modification"**, which confirms that id exists (an oracle for ids Bob can guess). Squatting: Bob pre-registers predictable ids (`INV-2026-0001`, `INV-2026-0002`, ...) before Alice's system uses them; her genuine initiations are refused with 409 and she cannot pay.
@@ -503,8 +507,8 @@ Format per guide section 2: location, issue, current code, risk, attack scenario
 
 **Priority P3 · Risk Medium (bench only) · OPEN, owner stream B · Register R26**
 
-- **Location:** `src/PaymentsBench.PartnerSimulator/Program.cs:34,36,75,86` (`GET`/`PUT /faults`, `settle`, `return`: no authentication); `flyio/partner.fly.toml:4-6` and `:13-17` (a documented hand-run path), `.github/workflows/deploy.yml:426` (`--no-public-ips`).
-- **Issue:** The simulator is open by design (ADR 0008). In a deployment, its privacy is the absence of a public IP, achieved by a flag in a workflow; nothing checks the result, and the private network (6PN) is shared by every app in the Fly organization.
+- **Location:** `src/PaymentsBench.PartnerSimulator/Program.cs:35,37,76,87` (`GET`/`PUT /faults`, `settle`, `return`: no authentication); `flyio/partner.fly.toml:4-6` and `:13-17` (a documented hand-run path), `.github/workflows/deploy.yml:426` (`--no-public-ips`).
+- **Issue:** The simulator is open by design (ADR 0015). In a deployment, its privacy is the absence of a public IP, achieved by a flag in a workflow; nothing checks the result, and the private network (6PN) is shared by every app in the Fly organization.
 - **Attack scenario:** (1) Someone redeploys the partner by hand with `flyctl deploy` (the toml documents the path) without `--no-public-ips`; Fly allocates a public address and `PUT /faults {"kind":"RejectAll"}` is on the internet: every submit fails, or `POST /transfers/{id}/settle` fabricates settlements that the API reconciles against. (2) A compromised neighbour on 6PN (authservice is a third-party image) calls the same endpoints.
 - **Impact:** The bench's availability and the integrity of its demonstrations. No real bank is involved; this is the reason it is P3 and not higher.
 - **Recommendation:** After the partner deploy, `flyctl ips list --app payments-bench-partner --json | jq -e 'length == 0'` fails the job if any address exists (a step to add to `deploy.yml`; the output shape of `flyctl ips list --json` cannot be checked offline, so it is not guessed at here).
@@ -558,7 +562,7 @@ Format per guide section 2: location, issue, current code, risk, attack scenario
 
 **Priority P4 · Risk Low · OPEN, owner stream A · Register R25**
 
-- **Location:** `src/PaymentsBench.Infrastructure/Partner/HttpPartnerGateway.cs:59` (`Enum.Parse<PartnerStatus>(body.Status, ...)`), `HttpStatementSource.cs:8-9`, `src/PaymentsBench.Infrastructure/InfrastructureRegistration.cs:76-98` (no response size limit; the `HttpClient` default is 2 GiB).
+- **Location:** `src/PaymentsBench.Infrastructure/Partner/HttpPartnerGateway.cs:59` (`Enum.Parse<PartnerStatus>(body.Status, ...)`), `HttpStatementSource.cs:47`, `src/PaymentsBench.Infrastructure/InfrastructureRegistration.cs:76-98` (no response size limit; the `HttpClient` default is 2 GiB).
 - **Issue:** API10: the service consumes its partner as if it were well-behaved, which is the one assumption the bench exists to refute.
 - **Attack scenario:** A compromised or buggy partner answers a status lookup with `"status":"Unrecognised"`: `Enum.Parse` throws an `ArgumentException`, which the status call's catch filter does not cover (R16, closed, mapped an open circuit to `Unavailable`; an unrecognised status is the same class of failure and is not mapped). `resolve` answers 500, and the sweep records the failure and tries the payment again at every sweep, forever. Sweeps take the oldest Submitted payments first, 50 at a time (`Sweeper:BatchSize`), so enough such payments keep every batch full and younger Submitted payments are never examined. Or it returns a multi-gigabyte statement that `GetFromJsonAsync` buffers until the API runs out of memory. Today the partner is the simulator.
 - **Impact:** Payments stuck at `Submitted` for good, and head-of-line blocking of the sweep; availability.
@@ -566,7 +570,7 @@ Format per guide section 2: location, issue, current code, risk, attack scenario
 
 ### Considered and dropped (no attack scenario, so style notes)
 
-- `flyio/api.fly.toml` cited "ADR 0004" for the Development policy; it is ADR 0008. A wrong cross-reference in a comment, corrected in this PR; not a finding.
+- `flyio/api.fly.toml` cited "ADR 0004" for the Development policy; it is ADR 0015. A wrong cross-reference in a comment, corrected in this PR; not a finding.
 - `DomainException` messages are returned to the caller and echo input (a scheme name, a key). They are `application/problem+json`, which a browser will not render as HTML, and the caller supplied the text; no scenario beyond SEC-05's oracle, which is counted there.
 - JWT clock skew is the framework default (5 minutes). Short token lifetime and revocation are authservice's (section 10).
 - `appsettings.Development.json` ships in the published image. It holds an empty connection string and a localhost address; nothing to protect.
@@ -585,14 +589,15 @@ Every route of the API and of the simulator, its method, what protects it **as i
 | `GET /metrics` (only if `Metrics:Prometheus:Enabled`) | `Extensions.cs:120` | yes | yes | yes | yes | `.AllowAnonymous()`, off by default | off; if on, reachable only from the scraper's network (section 10) |
 | `GET /openapi/v1.json` | `ApiServiceCollectionExtensions.cs:35` | Development only | yes | yes | yes | `AllowAnonymousInDevelopment`, else fallback (`IdentityRegistration.cs:82-83`) | authenticated at most; no UI is served |
 | `POST /payments` | `PaymentsEndpoints.cs:16` | no | yes | yes | yes | fallback policy | authenticated; stamps the owner (SEC-01) |
+| `POST /payments/pain001` | `Pain001Endpoints.cs:23` | no | yes | yes | yes | fallback policy | authenticated; stamps the owner (SEC-01); a cap on transactions per document (SEC-08) |
 | `GET /payments` | `PaymentsEndpoints.cs:23` | no | **all payments** | all | all | fallback policy | the caller's own payments; all for `payments.operate` (SEC-01) |
 | `GET /payments/{id}` | `PaymentsEndpoints.cs:28` | no | **any payment** | any | any | fallback policy | own payment, else 404; any for `payments.operate` (SEC-01) |
 | `POST /payments/{id}/submit` | `PaymentsEndpoints.cs:33` | no | **any payment** | any | any | fallback policy | owner or `payments.operate` (SEC-01, SEC-11) |
 | `POST /payments/{id}/resolve` | `PaymentsEndpoints.cs:39` | no | **any payment** | any | any | fallback policy | `payments.operate`; the sweep (R8, closed) is the automatic path (SEC-11) |
-| `POST /partner/notifications` | `PartnerNotificationEndpoints.cs:10` | no | **no (403)** | no | yes | group policy `partner-notifications` (`ApiServiceCollectionExtensions.cs:40`) | `payments.partner.notify` **and** a partner signature or mTLS (R13) |
-| `POST /reconciliation/runs/{date}` | `ReconciliationEndpoints.cs:9` | no | **no (403)** | yes | no | group policy `operations` (`ApiServiceCollectionExtensions.cs:41`) | `payments.operate` |
-| `GET /payments/{id}/ledger` | `LedgerEndpoints.cs:13` | no | **no (403)** | yes | no | group policy `operations` (`ApiServiceCollectionExtensions.cs:42`) | owner or `payments.operate` (SEC-01) |
-| `GET /ledger/balances/{account}/{currency}` | `LedgerEndpoints.cs:18` | no | **no (403)** | yes | no | group policy `operations` (`ApiServiceCollectionExtensions.cs:42`) | `payments.operate` |
+| `POST /partner/notifications` | `PartnerNotificationEndpoints.cs:10` | no | **no (403)** | no | yes | group policy `partner-notifications` (`ApiServiceCollectionExtensions.cs:41`) | `payments.partner.notify` **and** a partner signature or mTLS (R13) |
+| `POST /reconciliation/runs/{date}` | `ReconciliationEndpoints.cs:9` | no | **no (403)** | yes | no | group policy `operations` (`ApiServiceCollectionExtensions.cs:42`) | `payments.operate` |
+| `GET /payments/{id}/ledger` | `LedgerEndpoints.cs:13` | no | **no (403)** | yes | no | group policy `operations` (`ApiServiceCollectionExtensions.cs:43`) | owner or `payments.operate` (SEC-01) |
+| `GET /ledger/balances/{account}/{currency}` | `LedgerEndpoints.cs:18` | no | **no (403)** | yes | no | group policy `operations` (`ApiServiceCollectionExtensions.cs:43`) | `payments.operate` |
 
 Cells in bold are where the answer differs from "authenticated is enough". Before this PR the last four rows read "yes" in the Token column; that was SEC-02 and SEC-04.
 
@@ -614,15 +619,15 @@ Open by design: a simulated bank has no callers to authenticate, and its control
 
 | Method and route | Defined at | Protected by | Should be |
 |---|---|---|---|
-| `GET /health`, `GET /alive` | `Program.cs:13` (via `MapDefaultEndpoints`) | nothing, anonymous | anonymous (probe) |
-| `GET /diagnostics/calls` | `Program.cs:32` | nothing | private network only; reports call counts only |
-| `GET /faults` | `Program.cs:34` | nothing | private network only |
-| `PUT /faults` | `Program.cs:36` | nothing | private network only; SEC-13 |
-| `POST /transfers` | `Program.cs:42` | nothing | private network only; the API is the only caller |
-| `GET /transfers/{endToEndId}` | `Program.cs:70` | nothing | private network only |
-| `POST /transfers/{endToEndId}/settle` | `Program.cs:75` | nothing | private network only; SEC-13 |
-| `POST /transfers/{endToEndId}/return` | `Program.cs:86` | nothing | private network only; SEC-13 |
-| `GET /statements/{date}` | `Program.cs:97` | nothing | private network only |
+| `GET /health`, `GET /alive` | `Program.cs:14` (via `MapDefaultEndpoints`) | nothing, anonymous | anonymous (probe) |
+| `GET /diagnostics/calls` | `Program.cs:33` | nothing | private network only; reports call counts only |
+| `GET /faults` | `Program.cs:35` | nothing | private network only |
+| `PUT /faults` | `Program.cs:37` | nothing | private network only; SEC-13 |
+| `POST /transfers` | `Program.cs:43` | nothing | private network only; the API is the only caller |
+| `GET /transfers/{endToEndId}` | `Program.cs:71` | nothing | private network only |
+| `POST /transfers/{endToEndId}/settle` | `Program.cs:76` | nothing | private network only; SEC-13 |
+| `POST /transfers/{endToEndId}/return` | `Program.cs:87` | nothing | private network only; SEC-13 |
+| `GET /statements/{date}` | `Program.cs:98` | nothing | private network only |
 
 ## 7. Priorities and time windows
 
@@ -658,11 +663,11 @@ Legend: **OPEN**, **FIXED**, **NOT APPLICABLE**. "Context" is what already exist
 | SEC-05 | OPEN | P2 | `InitiatePayment.cs:86-91`; `PaymentsDbContext.cs:27` | Idempotency key is global: cross-caller replay, existence oracle, squatting | Needs the owner from SEC-01; the index and the lookup are one line each | Unique on `(OwnerId, IdempotencyKey)`; lookup by both. Blocks any multi-caller deployment together with SEC-01 | stream A (R21) |
 | SEC-06 | FIXED (Fly) | P2 | `IdentityRegistration.cs:42-50` | Development anonymous policy one variable from an open API | The anonymous branch is one `if` | Done for Fly (`FLY_APP_NAME`). Follow-up: explicit `Auth__AllowAnonymous` opt-in so the environment name alone cannot open the API | stream B |
 | SEC-07 | FIXED | P2 | `Extensions.cs:51` | 30 MB default request body | ServiceDefaults is shared by the API and the simulator | Done: 64 KiB default, configurable; 413 verified on a real Kestrel | stream B |
-| SEC-08 | OPEN | P2 | `ApiServiceCollectionExtensions.cs:31-43` | No rate limiting | `AddRateLimiter` is in the framework; `sub` is on every token | Per-`sub` limiter, anonymous limiter by trusted client IP, 429 problem, limits as configuration; ADR; re-measure the load numbers | stream B (R23) |
+| SEC-08 | OPEN | P2 | `ApiServiceCollectionExtensions.cs:31-44` | No rate limiting | `AddRateLimiter` is in the framework; `sub` is on every token | Per-`sub` limiter, anonymous limiter by trusted client IP, 429 problem, limits as configuration; ADR; re-measure the load numbers | stream B (R23) |
 | SEC-09 | OPEN | P3 | `InitiatePayment.cs:84-111`; `EfCoreStores.cs:284-288`; `PaymentsDbContext.cs:28` | End-to-end id is global: another caller's id answers 409 (oracle, squatting) with a misleading message | The stores already map the duplicate to a 409; the handler can check first | Owner-scoped uniqueness with SEC-01; a duplicate-id problem of its own | stream A (R22) |
 | SEC-11 | OPEN | P3 | `PaymentsEndpoints.cs:33,39` | `resolve`/`submit` open to every authenticated caller | The `operations` policy exists; one `.RequireAuthorization("operations")` on the resolve route | Apply it; owner rule for `submit` after SEC-01 | stream A (R24) |
 | SEC-12 | OPEN | P3 | `InitiatePayment.cs`, `SubmitPayment.cs`, `ApplyPartnerNotification.cs` | No actor on commands, events or logs | `sub` is on the principal; the log scope is one middleware | `Actor` on commands and outbox events; `sub` in the request log scope | stream A (R24) |
-| SEC-13 | OPEN | P3 | `PartnerSimulator/Program.cs:34,36,75,86`; `partner.fly.toml:4-6` | Simulator exposure rests on one unchecked flag | `flyctl ips list --json` is scriptable | Post-deploy check that the partner has no address; dedicated Fly org; control-route secret | stream B (R26) |
+| SEC-13 | OPEN | P3 | `PartnerSimulator/Program.cs:35,37,76,87`; `partner.fly.toml:4-6` | Simulator exposure rests on one unchecked flag | `flyctl ips list --json` is scriptable | Post-deploy check that the partner has no address; dedicated Fly org; control-route secret | stream B (R26) |
 | SEC-14 | OPEN | P3 | `docs/DEPLOYMENT.md`, `deploy.yml:59,212,293,384,442` | Org-wide Fly token | `FLY_ORG` is already a variable | Dedicated org; per-app deploy tokens after first deployment; rotation schedule | stream B (R26) |
 | SEC-15 | OPEN | P3 | actions (all workflows); `secret-scan.yml:46`; `authservice.fly.toml:15`, `postgres.fly.toml:24`; `AppHost.cs:27`; both `Dockerfile`s | Tags, not digests | Dependabot already covers github-actions and docker | SHA-pin actions; digest-pin authservice and postgres | stream B (R26) |
 | SEC-16 | OPEN | P4 | `appsettings.json:15` (API and simulator); `api.fly.toml:44` | No host filter, HSTS or forwarded-headers handling | `force_https` already redirects | `AllowedHosts` after learning Fly's health-check Host; document https-only clients | stream B (R26) |
@@ -675,7 +680,6 @@ Legend: **OPEN**, **FIXED**, **NOT APPLICABLE**. "Context" is what already exist
 |---|---|---|---|
 | SQL injection | NOT APPLICABLE | EF Core, no raw SQL | section 3.3 |
 | OS command injection | NOT APPLICABLE | no process is started | section 3.3 |
-| XML, XXE | NOT APPLICABLE | no XML (R2 will change that) | section 3.3 |
 | XSS, markdown, HTML rendering | NOT APPLICABLE | JSON only, no frontend | section 3.3 |
 | Insecure deserialization | NOT APPLICABLE | `System.Text.Json`, no type information | section 3.3 |
 | Path and file-name validation (guide section 6) | NOT APPLICABLE | no request value reaches the file system | section 3.3 |
@@ -695,7 +699,7 @@ Legend: **OPEN**, **FIXED**, **NOT APPLICABLE**. "Context" is what already exist
 | The deploy document states the `production` environment protections as requirements, and the pre-deployment checks as a bootstrapping step; a wrong ADR reference in `api.fly.toml` corrected | `docs/DEPLOYMENT.md`, `flyio/api.fly.toml` | none (documentation) |
 | JWT test host extracted so the new tests do not copy it | `tests/PaymentsBench.Api.Tests/JwtTestHost.cs` (new), `IdentityTests.cs` | the existing identity tests, unchanged in meaning |
 
-Decisions, because nobody can be asked (recorded as [ADR 0014](../adr/0014-scoped-grants-for-the-webhook-and-back-office-reads.md)):
+Decisions, because nobody can be asked (recorded as [ADR 0016](../adr/0016-scoped-grants-for-the-webhook-and-back-office-reads.md)):
 
 1. **A grant is a `role` value or one value of the `scope` claim.** The token's shape is authservice's choice and cannot be read from here, so both are accepted; claim names are as issued (inbound claim mapping is off). The default names are `payments.partner.notify` and `payments.operate`; `Auth:Grants:PartnerNotifications` and `Auth:Grants:Operations` rename them.
 1. **Fail closed.** If authservice does not mint these grants, the four endpoints answer 403 to everyone, including the operator. The simulated partner never calls the webhook itself (the scenarios and the README post to it by hand), and the k6 load script runs against the Development policy, where both policies are satisfied by anyone. A deployment that needs them gets them by configuring authservice, which is SEC-03's checklist.
