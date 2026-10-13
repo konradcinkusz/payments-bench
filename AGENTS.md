@@ -5,10 +5,10 @@ the plugin is declared in `.claude/settings.json`, so its skills (reference arch
 repo baseline, ticket delivery, research documentation) load with the session. Read, in this order:
 
 1. `README.md` - what the service does and how to run it.
-2. `docs/ARCHITECTURE.md` - the shape and the seven rules that matter.
-3. `docs/REGISTER.md` - what is not yet proved. A change that closes a row moves it to *Closed*
+1. `docs/ARCHITECTURE.md` - the shape and the seven rules that matter.
+1. `docs/REGISTER.md` - what is not yet proved. A change that closes a row moves it to *Closed*
    with the date; a change that opens a gap adds a row. The register is never silently wrong.
-4. `docs/adr/` - decisions already taken. A new decision is a new record, not an edit.
+1. `docs/adr/` - decisions already taken. A new decision is a new record, not an edit.
 
 Rules of the road:
 
