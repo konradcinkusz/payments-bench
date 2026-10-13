@@ -1,0 +1,22 @@
+# Exclusion-based: the build context is the repository root, so everything an image does not
+# need stays out. The Dockerfiles copy only what they name (props, project files, src/).
+**/bin/
+**/obj/
+.git/
+.github/
+.claude/
+.vs/
+.idea/
+.env
+.env.*
+**/*.user
+**/TestResults/
+coverage/
+tests/
+docs/
+k6/
+scripts/
+flyio/
+*.md
+**/Dockerfile
+.dockerignore
