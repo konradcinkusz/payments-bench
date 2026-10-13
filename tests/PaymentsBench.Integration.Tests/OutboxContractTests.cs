@@ -21,7 +21,7 @@ public sealed class OutboxContractTests : IAsyncLifetime, IDisposable
 {
     private static readonly int[] MinutesOutOfOrder = [5, 1, 4, 2, 3];
 
-    private static readonly ISchemeCatalog Schemes = SchemeCatalogLoader.Load(Path.Combine(AppContext.BaseDirectory, "scenarios"));
+    private static readonly ISchemeCatalog Schemes = SchemeCatalogLoader.Load(Path.Join(AppContext.BaseDirectory, "scenarios"));
 
     private readonly MigratedPostgresFixture _database = new();
     private readonly FailNextSave _failNextSave = new();
