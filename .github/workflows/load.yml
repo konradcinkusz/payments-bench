@@ -1,0 +1,50 @@
+name: Load
+
+# Manual only: a load run takes minutes and its numbers depend on the runner, so it is never a
+# merge gate. It starts the simulated partner and the API in memory, runs k6/payments.js while
+# the simulator cycles its fault profiles, and uploads the k6 summary.
+
+on:
+  workflow_dispatch:
+    inputs:
+      vus:
+        description: Virtual users running payments
+        default: '10'
+      phase_seconds:
+        description: Seconds per fault profile (five profiles per cycle)
+        default: '30'
+
+permissions:
+  contents: read
+
+jobs:
+  load:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Record the machine
+        run: |
+          {
+            echo "cpus: $(nproc)"
+            free -h | sed -n 2p
+            uname -a
+          } | tee machine.txt
+      - name: Run k6 against the simulator and the API
+        # scripts/load-test.sh downloads the pinned k6 release and verifies its checksum.
+        run: scripts/load-test.sh
+        env:
+          VUS: ${{ inputs.vus }}
+          PHASE_SECONDS: ${{ inputs.phase_seconds }}
+          SUMMARY_FILE: ${{ github.workspace }}/k6-summary.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: k6-summary
+          path: |
+            k6-summary.json
+            machine.txt
+          if-no-files-found: warn
