@@ -68,11 +68,10 @@ the evidence, and stream C will write it up.
 - F-2: the resilience pipeline's `TimeoutRejectedException` escaped the gateway's catch and
   turned a timeout-after-accept into a 500 instead of an Unknown outcome; committed-before-call
   still let the resolver recover without a duplicate. Found by the HTTP walk-through.
-- F-3, F-4, F-5 (open, found while writing `docs/OVERVIEW.md`; the fixes are in the core, so they
-  are offered to stream A): the resolver returns `SafeToResubmit` after a resubmit whose outcome is
-  unknown; a payment settled and later returned is an `OnStatementOnly` break for its settlement
-  day; the partner client's retry predicate never matches an exception, so a `GET` that times out
-  is not retried. Evidence for each is in `docs/FINDINGS.md`.
+- F-3, F-4, F-5 (found while writing `docs/OVERVIEW.md`, fixed by stream A in #21 and #23): the
+  resolver returned `SafeToResubmit` after a resubmit whose outcome was unknown; a payment settled and later returned was an `OnStatementOnly` break for its settlement
+  day; the partner client's retry predicate never matched an exception. Evidence for each, and the
+  thirteen findings streams A and B recorded, are in `docs/FINDINGS.md` (F-1 to F-18).
 
 ## Done means
 
