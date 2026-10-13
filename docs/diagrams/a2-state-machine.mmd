@@ -1,0 +1,17 @@
+stateDiagram-v2
+    [*] --> Initiated : Payment.Initiate
+    Initiated --> Submitted : MarkSubmitted
+    Submitted --> Accepted : MarkAccepted
+    Submitted --> Rejected : MarkRejected
+    Submitted --> Settled : MarkSettled
+    Accepted --> Settled : MarkSettled
+    Accepted --> Rejected : MarkRejected
+    Settled --> Returned : MarkReturned
+    Rejected --> [*] : terminal, accepts nothing
+    Returned --> [*] : terminal, accepts nothing
+
+    note right of Submitted
+        Committed before the partner call.
+        An unknown outcome stays here
+        until the resolver asks the partner.
+    end note

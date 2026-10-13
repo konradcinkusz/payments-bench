@@ -1,0 +1,236 @@
+% ============================================================================
+% HOUSE-PREAMBLE.tex -- the estate's house LaTeX style, as a file you copy in
+% and \input rather than a block you copy out.
+%
+% See 00-RESEARCH-DOCUMENTATION.md, "The house preamble is a file, not a
+% block". Copy this file to <repo>/docs/papers/house-preamble.tex (or
+% docs/research/papers/ for a study paper) and \input it from every document
+% in the repository that wants the house look. One copy per repository; every
+% document in that repository \inputs the same one.
+%
+% WHY A FILE. The estate's first attempt at this shipped a template whose
+% preamble was meant to be copied into each new document. Copying is what
+% drifts: `ab-ove`'s two overview editions carried none of the seven house
+% markers -- not the colors, the section formatting, the header, the status
+% marker, the path macro, the geometry or the link style -- and nothing said
+% so, because a convention about copying correctly has nothing to fail. The
+% Beamer theme, which was always distributed as a file, propagated
+% byte-identically over the same period. Distribute the file.
+%
+% ----------------------------------------------------------------------------
+% THE CONTRACT. The including document defines these BEFORE \input, and
+% carries its own \documentclass and \begin{document} -- this file has
+% neither, so that one preamble can serve documents with different classes.
+%
+%   \paperstatus    Right-hand header, and the title block's status line.
+%                   A study paper: DRAFT or VERIFIED, mirroring the study's
+%                   own header. Any other document: its own status, named in
+%                   that document's header comment as repurposed.
+%   \headerleft     Left-hand header. Usually "Project --- Document title".
+%   \pdftitleline   PDF metadata title.
+%   \pdfauthorline  PDF metadata author.
+%
+% Optional, both defaulted below if the document does not define them:
+%
+%   \houselang      babel language for this edition, e.g. \def\houselang{polish}.
+%                   Defaults to english. Set it in the edition file, not here:
+%                   it is the one thing that is genuinely per-edition.
+%   \editionsuffix  This edition's diagram-file suffix, e.g.
+%                   \def\editionsuffix{.pl}. Defaults to empty. \dgm reads it,
+%                   so a figure is called by slug and resolves per edition --
+%                   see "Figures" below.
+%
+% A minimal English document:
+%
+%   \documentclass[11pt,a4paper]{article}
+%   \newcommand{\paperstatus}{DRAFT}
+%   \newcommand{\headerleft}{Project --- Overview}
+%   \newcommand{\pdftitleline}{Project: an overview}
+%   \newcommand{\pdfauthorline}{Author Name}
+%   \input{house-preamble}
+%   \begin{document}
+%   ...
+%
+% Its Polish sibling differs by two lines, both before the \input:
+%
+%   \def\houselang{polish}
+%   \def\editionsuffix{.pl}
+%
+% ----------------------------------------------------------------------------
+% PACKAGES THIS FILE DOES NOT LOAD. The house set below is what every document
+% needs. A document that needs more -- tikz, pifont, longtable, fancyvrb,
+% amssymb -- loads it in its own preamble AFTER the \input, and says in a
+% comment that it is an addition rather than part of the house set, so the
+% next reader can tell the two apart at a glance.
+% ============================================================================
+
+% ----------------------------------------------------------------------------
+% Encoding, then language. fontenc before inputenc before babel: babel reads
+% the active font encoding when it sets up its shorthands, so loading it first
+% gives an edition that is translated but typeset wrong.
+% ----------------------------------------------------------------------------
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+
+% The edition's language, defaulted so a monolingual document defines nothing.
+% \PassOptionsToPackage rather than \usepackage[\houselang]{babel}: the option
+% list here is a macro, and PassOptionsToPackage is the mechanism built for
+% passing one.
+\providecommand{\houselang}{english}
+\PassOptionsToPackage{\houselang}{babel}
+\usepackage{babel}
+
+% ----------------------------------------------------------------------------
+% The house package set.
+% ----------------------------------------------------------------------------
+\usepackage{geometry}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{parskip}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+
+% ----------------------------------------------------------------------------
+% Page geometry.
+% ----------------------------------------------------------------------------
+\geometry{
+    a4paper,
+    left=2.2cm,
+    right=2.2cm,
+    top=2.5cm,
+    bottom=2.5cm
+}
+
+% ----------------------------------------------------------------------------
+% House colors. Extracted from the estate's first formal documents
+% (business_analysis.tex, pitch-deck-demium.tex) and unchanged since: a
+% document from any repository should look like it came from the same shop.
+% ----------------------------------------------------------------------------
+\definecolor{primaryblue}{RGB}{41,128,185}
+\definecolor{darkblue}{RGB}{31,78,121}
+\definecolor{lightgray}{RGB}{236,240,241}
+\definecolor{darkgray}{RGB}{52,73,94}
+\definecolor{accentgreen}{RGB}{39,174,96}
+\definecolor{accentorange}{RGB}{230,126,34}
+\definecolor{accentred}{RGB}{231,76,60}
+
+% ----------------------------------------------------------------------------
+% Section formatting.
+% ----------------------------------------------------------------------------
+\titleformat{\section}
+    {\color{primaryblue}\Large\bfseries\sffamily}
+    {\thesection.}{0.5em}{}[\titlerule]
+
+\titleformat{\subsection}
+    {\color{darkblue}\large\bfseries\sffamily}
+    {\thesubsection}{0.5em}{}
+
+\titleformat{\subsubsection}
+    {\color{darkgray}\normalsize\bfseries\sffamily}
+    {\thesubsubsection}{0.5em}{}
+
+% ----------------------------------------------------------------------------
+% Header and footer. \paperstatus rides in the right-hand header of every
+% page, so a draft cannot be mistaken for a final document at any page a
+% reader happens to open it at -- which is the whole reason the marker is in
+% the header rather than only on the title page.
+% ----------------------------------------------------------------------------
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancyhead[L]{\small\sffamily\color{darkgray} \headerleft}
+\fancyhead[R]{\small\sffamily\color{accentred} \paperstatus\ --- \today}
+\fancyfoot[C]{\thepage}
+
+% ----------------------------------------------------------------------------
+% Links and PDF metadata.
+% ----------------------------------------------------------------------------
+\hypersetup{
+    colorlinks=true,
+    linkcolor=primaryblue,
+    urlcolor=primaryblue,
+    pdfauthor={\pdfauthorline},
+    pdftitle={\pdftitleline}
+}
+
+% ----------------------------------------------------------------------------
+% Figures. A diagram's source is one .mmd file rendered to vector PDF by the
+% repository's render step; the document includes the rendered file.
+%
+% \dgm resolves the path from a slug and the edition, so the body text names a
+% diagram the way the diagrams directory does and never writes a path:
+%
+%   \includegraphics[width=0.78\linewidth]{\dgm{a1-system-context}}
+%
+% resolves to ../diagrams/rendered/a1-system-context.pdf in the default
+% edition and ../diagrams/rendered/a1-system-context.pl.pdf in an edition that
+% set \def\editionsuffix{.pl}. A repository whose editions share one set of
+% diagrams simply never sets \editionsuffix, and every edition resolves to the
+% same file.
+%
+% Hardcoding the path instead is what the estate did first, and it costs one
+% edit per figure per edition: `ab-ove` maintained `b1-reader-loop.pdf` in the
+% English file against `b1-reader-loop.pl.pdf` in the Polish one, by hand, in
+% both. At three figures that is survivable; `agent-eval-bench` has 23.
+%
+% \housediagramdir is overridable for a document that does not sit one level
+% below the diagrams directory -- define it before the \input.
+% ----------------------------------------------------------------------------
+\providecommand{\editionsuffix}{}
+\providecommand{\housediagramdir}{../diagrams/rendered}
+\newcommand{\dgm}[1]{\housediagramdir/#1\editionsuffix.pdf}
+
+% ----------------------------------------------------------------------------
+% House convenience commands.
+%
+% \repopath is for a path, a filename or an identifier copied from the code;
+% it is deliberately the only one of these, so that a document does not grow a
+% private synonym for it. \finding marks the sentence a section exists to
+% deliver.
+% ----------------------------------------------------------------------------
+\newcommand{\repopath}[1]{\colorbox{lightgray}{\texttt{#1}}}
+\newcommand{\finding}[1]{{\color{primaryblue}\textbf{#1}}}
+
+% ----------------------------------------------------------------------------
+% The house title block, as a command so that every document's first page
+% looks the same and none of them reimplements it.
+%
+%   \housetitle{Title}{Subtitle or empty}{Author}{Affiliation or repo URL}{Provenance line}
+%
+% The provenance line is the one this estate keeps paying for the absence of:
+% a document that presents another document names it here, so a reader who
+% finds the two disagreeing knows which one is the source. For a study paper
+% it names the companion study and the commit; for a project overview, the
+% markdown it presents.
+% ----------------------------------------------------------------------------
+\newcommand{\housetitle}[5]{%
+    \thispagestyle{plain}%
+    \begin{center}
+        {\LARGE\bfseries\sffamily\color{darkblue} #1}
+
+        \ifx\relax#2\relax\else
+            \vspace{0.3cm}
+
+            {\Large\sffamily\color{darkgray} #2}
+        \fi
+
+        \vspace{0.6cm}
+
+        {\large #3}
+
+        \vspace{0.2cm}
+
+        {\normalsize\color{darkgray} #4}
+
+        \vspace{0.2cm}
+
+        {\normalsize\color{accentred}\sffamily \paperstatus\ --- \today\ --- #5}
+    \end{center}
+
+    \vspace{0.4cm}
+}

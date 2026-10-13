@@ -483,6 +483,9 @@ open as a statement of scope.
 | [0001](adr/0001-no-blind-resubmit.md) | An unknown submit outcome is never retried blind; the resolver asks the partner and resubmits only on `NotFound`. |
 | [0002](adr/0002-double-entry-ledger.md) | Money is a double-entry, append-only ledger; balances are derived. |
 | [0003](adr/0003-reconciliation-produces-a-work-queue.md) | Reconciliation produces breaks, not alerts. |
+| [0004](adr/0004-the-overview-pdf-is-built-on-demand.md) | The overview PDF is built on demand, on pull requests touching its sources, and on tags; never committed. |
+| [0005](adr/0005-the-documentation-site-is-generated.md) | The documentation site is generated from one source and one facts file, and checked for staleness in CI. |
+| [0006](adr/0006-the-site-loads-no-external-resource.md) | The site loads no external resource and works from `file://`. |
 
 ## 18. Non-goals
 
@@ -507,12 +510,41 @@ and presentation editions that add nothing the overview does not contain.
 
 ## 20. Getting the PDF
 
-A LaTeX edition of this document, built by a GitHub Actions workflow, is planned as slice C4 in
-[`plans/stream-c-docs.md`](plans/stream-c-docs.md). It does not exist yet; this section will say how
-to get it once it has merged.
+A LaTeX edition of this document lives at
+[`papers/payments-bench-overview.tex`](papers/payments-bench-overview.tex). It is a curated
+presentation of this file, introduces no fact this file does not contain, and states in its own
+header that it is a project overview, not a research paper. It uses the house preamble
+([`papers/house-preamble.tex`](papers/house-preamble.tex), copied unmodified from
+architecture-standards and checked by digest in `scripts/check-papers.mjs`) and includes the
+diagrams from [`diagrams/`](diagrams/) rendered to vector PDF. The PDF is build output and never
+committed.
+
+The **Build Overview PDF** workflow (`.github/workflows/build-overview-pdf.yml`) builds it:
+
+1. Open the repository's **Actions** tab and select **Build Overview PDF**.
+1. Click **Run workflow**, or open any pull request that touches `docs/papers/` or
+   `docs/diagrams/` (the workflow runs on those automatically).
+1. Download `PaymentsBench_Overview_PDF` from the run's **Artifacts** section.
+
+On a `v*` tag the same workflow attaches `PaymentsBench_Overview.pdf` to the GitHub Release.
+Locally, with Node and a TeX distribution installed:
+
+```bash
+npm ci && npm run render:diagrams
+cd docs/papers && latexmk -pdf payments-bench-overview.tex
+```
 
 ## 21. Getting the site
 
-A generated static one-pager served from `docs/` by GitHub Pages is planned as slices C5 and C6 in
-[`plans/stream-c-docs.md`](plans/stream-c-docs.md). It does not exist yet; this section will say
-where it is once it has merged.
+The site is a single generated page, `docs/index.html`, built by `scripts/site-build.mjs` from
+`docs/site/source.html`, `docs/site/style.css` and `docs/site/status.json`, plus facts read from the
+register, the scenarios, the ADRs and the findings. It loads no external resource and opens from
+`file://`. Regenerate it with `npm run site:build`; `npm run site:check` fails CI when the committed
+page is stale (ADR 0005, ADR 0006).
+
+It is published by `.github/workflows/deploy-pages.yml`, which uploads `docs/` to Pages on a
+push to `main` that touches `docs/`, and on demand. It needs one step by hand that no API can
+perform: **Settings > Pages > Build and deployment > Source = GitHub Actions**. Until that is set,
+the workflow fails (`configure-pages` with "Get Pages site failed", then the deploy job with a
+"Pages not enabled" error). [`DEPLOYMENT-DOCS.md`](DEPLOYMENT-DOCS.md)
+has the detail.
