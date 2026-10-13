@@ -1,0 +1,73 @@
+# payments-bench-postgres: one PostgreSQL server, two logical databases (`payments` and
+# `authservice`), each with its own role and no cross-grants (P3, shared-service-reuse §5).
+# Co-location on one server is a cost decision; the boundary between the databases is not.
+#
+# Stateful: deploy with --ha=false and never scale past one machine. A second machine would get a
+# second, empty volume, not a replica. This is a bench database: one volume, no standby, no backup
+# schedule (see docs/DEPLOYMENT.md, "What is off the table").
+#
+# Secrets (set by the pipeline, never in this file; names only, see docs/DEPLOYMENT.md):
+#   POSTGRES_PASSWORD         superuser password
+#   PAYMENTS_DB_PASSWORD      password of role `payments`     (read by the first-boot script)
+#   AUTHSERVICE_DB_PASSWORD   password of role `authservice` (read by the first-boot script)
+
+app = "payments-bench-postgres"   # globally unique across all of Fly: <system>-<service>
+primary_region = "fra"            # the volume lives in one region; so do all its clients
+
+# No [http_service] and no [[services]] block, deliberately: the database is reachable only at
+# payments-bench-postgres.internal:5432 over 6PN. The deploy also passes --no-public-ips. A
+# database with a public listener is a database waiting to be scanned.
+
+[build]
+  # A pinned major from the vanilla image, not Fly's managed postgres-flex (which expects
+  # `fly postgres create` bootstrapping) and never `latest`.
+  image = "postgres:17-alpine"
+
+[env]
+  POSTGRES_USER = "postgres"                    # the superuser; applications never use it
+  POSTGRES_DB = "postgres"                      # the maintenance database; the two real ones are created below
+  # A SUBDIRECTORY of the mount: the volume root carries lost+found and initdb refuses a
+  # non-empty directory.
+  PGDATA = "/var/lib/postgresql/data/pgdata"
+  POSTGRES_INITDB_ARGS = "--encoding=UTF8 --locale=C"
+
+[[mounts]]
+  source = "pgdata"                             # volume name, created per app and region
+  destination = "/var/lib/postgresql/data"      # PGDATA above sits one level below this
+  initial_size = "3gb"                          # can grow later, never shrink
+
+# TCP check on the machine itself: no public listener, so no proxy smoke check exists, and the
+# deploy would otherwise declare success on a container that started but never accepted a
+# connection. Runs on the host, not through the network.
+[checks]
+  [checks.postgres]
+    type = "tcp"
+    port = 5432
+    interval = "15s"
+    timeout = "3s"
+    grace_period = "30s"
+
+[[vm]]
+  size = "shared-cpu-1x"            # the smallest shared CPU
+  memory = "1gb"                    # postgres wants more headroom than the 256-512 mb services
+
+# Runs on first boot only: the postgres entrypoint executes /docker-entrypoint-initdb.d/*.sh when
+# the data directory is empty. Passwords arrive as environment variables from Fly secrets and
+# reach psql as variables (:'pw'), never spliced into the SQL text. Rotating a role password later
+# is `ALTER ROLE` by hand; editing this script does not re-run it.
+[[files]]
+  guest_path = "/docker-entrypoint-initdb.d/01-create-databases.sh"
+  raw_value = '''
+#!/bin/bash
+set -euo pipefail
+create() {
+  local name="$1" password="$2"
+  psql -v ON_ERROR_STOP=1 -v pw="$password" -v name="$name" --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<'EOSQL'
+CREATE ROLE :"name" LOGIN PASSWORD :'pw';
+CREATE DATABASE :"name" OWNER :"name";
+REVOKE CONNECT ON DATABASE :"name" FROM PUBLIC;
+EOSQL
+}
+create payments "${PAYMENTS_DB_PASSWORD:?PAYMENTS_DB_PASSWORD secret is not set}"
+create authservice "${AUTHSERVICE_DB_PASSWORD:?AUTHSERVICE_DB_PASSWORD secret is not set}"
+'''
