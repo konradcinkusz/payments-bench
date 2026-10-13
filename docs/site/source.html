@@ -5,7 +5,7 @@
 <p class="note"><strong>The partner bank is simulated.</strong> Nothing in this repository has talked to a real bank. The partner is <code>src/PaymentsBench.PartnerSimulator</code>, and its API shape is invented (register row R1, below).</p>
 
 <div class="stat-row">
-<div class="stat"><span class="big-num">{{tests-total}}</span><p>tests, no database needed</p><span class="src">{{fact:tests.domain}} in {{src:tests.domain}} + {{fact:tests.application}} in {{src:tests.application}} · as of {{asof:tests.domain}}</span></div>
+<div class="stat"><span class="big-num">{{tests-total}}</span><p>tests, no database needed</p><span class="src">{{fact:tests.domain}} in {{src:tests.domain}} + {{fact:tests.application}} in {{src:tests.application}} + {{fact:tests.api}} in {{src:tests.api}} · as of {{asof:tests.domain}}</span></div>
 <div class="stat"><span class="big-num">6</span><p>payment states, every allowed move in one table</p><span class="src">src/PaymentsBench.Domain/Payments/PaymentTransitions.cs</span></div>
 <div class="stat"><span class="big-num">3</span><p>ledger accounts</p><span class="src">src/PaymentsBench.Domain/Ledger/LedgerAccounts.cs</span></div>
 <div class="stat"><span class="big-num">{{count:scenarios}}</span><p>fault scenarios, as data</p><span class="src">scenarios/*.yaml</span></div>

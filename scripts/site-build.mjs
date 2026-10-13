@@ -278,7 +278,7 @@ function build() {
   const hasPdfWorkflow = existsSync(rel('.github/workflows/build-overview-pdf.yml'));
   const css = read('docs/site/style.css').trimEnd();
 
-  const testsTotal = facts.get('tests.domain').value + facts.get('tests.application').value;
+  const testsTotal = facts.get('tests.domain').value + facts.get('tests.application').value + (facts.get('tests.api')?.value ?? 0);
   const asOfDates = [...facts.values()].map((f) => f.asOf).sort();
   const prs = facts.get('mergedPullRequests').value;
 

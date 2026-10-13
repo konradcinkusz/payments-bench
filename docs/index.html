@@ -269,12 +269,12 @@ figure.fig figcaption { font-size: 13.5px; color: var(--muted); padding: 6px 4px
 <p class="note"><strong>The partner bank is simulated.</strong> Nothing in this repository has talked to a real bank. The partner is <code>src/PaymentsBench.PartnerSimulator</code>, and its API shape is invented (register row R1, below).</p>
 
 <div class="stat-row">
-<div class="stat"><span class="big-num">37</span><p>tests, no database needed</p><span class="src">15 in tests/PaymentsBench.Domain.Tests + 22 in tests/PaymentsBench.Application.Tests · as of 2026-10-13</span></div>
+<div class="stat"><span class="big-num">63</span><p>tests, no database needed</p><span class="src">15 in tests/PaymentsBench.Domain.Tests + 22 in tests/PaymentsBench.Application.Tests + 26 in tests/PaymentsBench.Api.Tests · as of 2026-10-13</span></div>
 <div class="stat"><span class="big-num">6</span><p>payment states, every allowed move in one table</p><span class="src">src/PaymentsBench.Domain/Payments/PaymentTransitions.cs</span></div>
 <div class="stat"><span class="big-num">3</span><p>ledger accounts</p><span class="src">src/PaymentsBench.Domain/Ledger/LedgerAccounts.cs</span></div>
 <div class="stat"><span class="big-num">7</span><p>fault scenarios, as data</p><span class="src">scenarios/*.yaml</span></div>
 <div class="stat"><span class="big-num">10</span><p>open rows in the register of what is not proved</p><span class="src">docs/REGISTER.md</span></div>
-<div class="stat"><span class="big-num">6</span><p>decision records</p><span class="src">docs/adr/</span></div>
+<div class="stat"><span class="big-num">7</span><p>decision records</p><span class="src">docs/adr/</span></div>
 </div>
 
 <div class="cards cards-3">
@@ -557,7 +557,7 @@ figure.fig figcaption { font-size: 13.5px; color: var(--muted); padding: 6px 4px
 <h2>Run it</h2>
 <p class="lede">No bank is involved: the partner is the simulator. Without a <code>payments</code> connection string the service runs in memory and says so in its log.</p>
 <ol class="steps">
-<li><p>Run the tests. 37 tests, no database needed.</p><pre class="code">dotnet test</pre><span class="src">README.md</span> <span class="src">tests/PaymentsBench.Application.Tests · 2026-10-13</span></li>
+<li><p>Run the tests. 63 tests, no database needed.</p><pre class="code">dotnet test</pre><span class="src">README.md</span> <span class="src">tests/PaymentsBench.Application.Tests · 2026-10-13</span></li>
 <li><p>Start the simulated partner and the API, in two terminals.</p><pre class="code">dotnet run --project src/PaymentsBench.PartnerSimulator   # http://localhost:5101
 dotnet run --project src/PaymentsBench.Api                # http://localhost:5100</pre><p class="muted">Or, with Aspire (PostgreSQL, simulator, API, dashboard): <code>dotnet run --project src/PaymentsBench.AppHost</code></p></li>
 <li><p>Initiate and submit a transfer. The <code>Idempotency-Key</code> header is required.</p><pre class="code">curl -X POST localhost:5100/payments -H 'Content-Type: application/json' -H 'Idempotency-Key: demo-1' \
@@ -592,6 +592,7 @@ node scripts/site-build.mjs --check   # exits 1 if the committed page is stale</
 <li><a href="https://github.com/konradcinkusz/payments-bench/blob/main/docs/adr/0001-no-blind-resubmit.md">ADR 0001: An unknown submit outcome is never retried blind</a> <span class="muted">decision record</span></li>
 <li><a href="https://github.com/konradcinkusz/payments-bench/blob/main/docs/adr/0002-double-entry-ledger.md">ADR 0002: Money is a double-entry, append-only ledger</a> <span class="muted">decision record</span></li>
 <li><a href="https://github.com/konradcinkusz/payments-bench/blob/main/docs/adr/0003-reconciliation-produces-a-work-queue.md">ADR 0003: Reconciliation produces breaks, not alerts</a> <span class="muted">decision record</span></li>
+<li><a href="https://github.com/konradcinkusz/payments-bench/blob/main/docs/adr/0004-api-validation-and-errors.md">ADR 0004: Built-in validation, one exception handler, one problem body</a> <span class="muted">decision record</span></li>
 <li><a href="https://github.com/konradcinkusz/payments-bench/blob/main/docs/adr/0004-the-overview-pdf-is-built-on-demand.md">ADR 0004: The overview PDF is built on demand, on pull requests touching its sources, and on tags</a> <span class="muted">decision record</span></li>
 <li><a href="https://github.com/konradcinkusz/payments-bench/blob/main/docs/adr/0005-the-documentation-site-is-generated.md">ADR 0005: The documentation site is generated, not hand-maintained</a> <span class="muted">decision record</span></li>
 <li><a href="https://github.com/konradcinkusz/payments-bench/blob/main/docs/adr/0006-the-site-loads-no-external-resource.md">ADR 0006: The site loads no external resource</a> <span class="muted">decision record</span></li>
