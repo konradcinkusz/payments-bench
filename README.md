@@ -77,6 +77,7 @@ curl localhost:5100/payments/<id>/ledger
 |---|---|
 | **To be pointed at the right document** | [`docs/START-HERE.md`](docs/START-HERE.md): which of the four kinds of document you need, and where it is. |
 | **The whole repository in words, one linear read** | [`docs/OVERVIEW.md`](docs/OVERVIEW.md): the source of truth for the argument, the mechanisms, the register and the honest readiness assessment. |
+| **Diagrams that render on GitHub** | [`docs/DIAGRAMS.md`](docs/DIAGRAMS.md): six Mermaid diagrams (money path, state machine, submit and resolve, outbox and inbox, reconciliation, delivery topology), each also a file in [`docs/diagrams/`](docs/diagrams/). |
 | **What building it caught** | [`docs/FINDINGS.md`](docs/FINDINGS.md): five findings with evidence, unflattering on purpose. |
 | **The shape and the seven rules** | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). |
 | **What is not proved** | [`docs/REGISTER.md`](docs/REGISTER.md): dated rows with closing conditions. |
@@ -124,11 +125,12 @@ tests/                              domain and application tests on the in-memor
 scenarios/                          the fault scenarios as data, and the scheme rules
 docs/                               architecture, the register, decision records
   START-HERE.md  OVERVIEW.md  FINDINGS.md  ARCHITECTURE.md  REGISTER.md
+  DIAGRAMS.md                       six Mermaid diagrams, each also a file in diagrams/
   DEPLOYMENT-DOCS.md                how the documentation is published
   adr/                              decision records
   plans/                            the three streams of planned work
-scripts/                            documentation tooling (link check)
-package.json                        documentation tooling only: markdownlint and link check, nothing .NET depends on it
+scripts/                            documentation tooling (link check, diagram render and check)
+package.json                        documentation tooling only: markdownlint, link check and diagram check, nothing .NET depends on it
 .github/workflows/                  CI; the Pages deploy workflow
 ```
 
