@@ -1,4 +1,4 @@
-# ADR 0004: Business calendars are dated, covered data
+# ADR 0007: Business calendars are dated, covered data
 
 **Status:** accepted, 2026-10-13
 
