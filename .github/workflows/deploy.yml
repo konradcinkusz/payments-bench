@@ -1,0 +1,512 @@
+name: Deploy
+
+# Tag-driven build and ordered deploy of the Fly.io estate (P7, P12). See docs/DEPLOYMENT.md.
+#
+#   test -> detect-changes -> build (matrix) -> deploy postgres -> authservice -> partner -> api
+#
+# Nothing here needs a paid account to pass:
+# - Pushing images to GHCR needs only the automatic GITHUB_TOKEN, so `build` runs whether or not a
+#   Fly token exists. It is the only job with `packages: write`.
+# - Every flyctl step is guarded. The first step of each deploy job checks FLY_API_TOKEN and sets
+#   an output; without the token the job writes what it would have deployed to the step summary
+#   and finishes green.
+#
+# Never triggered by a pull request: a deploy is an act, and a tag is the record of it.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      deploy_all:
+        description: Treat every service as changed (use after a failed tag run or a teardown)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# One deploy at a time, and never cancel one halfway: a half-deployed estate is worse than a late one.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  FLYCTL_VERSION: '0.3.200'
+  FLYCTL_SHA256: c174cbb0f245ce820a1c2da63db6d3248ab34cdb58016fb756e1c3eb0f13f2dc
+  REGISTRY_PREFIX: ghcr.io/konradcinkusz/payments-bench
+  AUTHSERVICE_URL: https://payments-bench-authservice.fly.dev
+  API_URL: https://payments-bench-api.fly.dev
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: dotnet restore PaymentsBench.sln
+      - run: dotnet build PaymentsBench.sln --no-restore --configuration Release -warnaserror
+      - run: dotnet test PaymentsBench.sln --no-build --configuration Release
+
+  detect-changes:
+    name: detect changes
+    runs-on: ubuntu-latest
+    # The `production` environment holds FLY_API_TOKEN, needed for the missing-app probe.
+    environment: production
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      DEPLOY_ALL: ${{ inputs.deploy_all }}
+    outputs:
+      tag: ${{ steps.detect.outputs.tag }}
+      postgres: ${{ steps.detect.outputs.postgres }}
+      authservice: ${{ steps.detect.outputs.authservice }}
+      partner: ${{ steps.detect.outputs.partner }}
+      api: ${{ steps.detect.outputs.api }}
+      matrix: ${{ steps.detect.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the previous tag is found by walking history
+      - name: Check for a Fly token
+        id: guard
+        run: |
+          if [ -n "${FLY_API_TOKEN:-}" ]; then echo "enabled=true" >> "$GITHUB_OUTPUT"; else echo "enabled=false" >> "$GITHUB_OUTPUT"; fi
+      - name: Install flyctl
+        if: steps.guard.outputs.enabled == 'true'
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/flyctl.tgz" "https://github.com/superfly/flyctl/releases/download/v${FLYCTL_VERSION}/flyctl_${FLYCTL_VERSION}_Linux_x86_64.tar.gz"
+          echo "${FLYCTL_SHA256}  $RUNNER_TEMP/flyctl.tgz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/flyctl.tgz" -C "$RUNNER_TEMP" flyctl
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Probe which Fly apps exist
+        id: apps
+        if: steps.guard.outputs.enabled == 'true'
+        run: |
+          flyctl apps list --json > "$RUNNER_TEMP/apps.json"
+          # Field casing has changed between flyctl versions: match both.
+          jq -r '.[] | (.Name // .name)' "$RUNNER_TEMP/apps.json" | sort > "$RUNNER_TEMP/apps.txt"
+          cat "$RUNNER_TEMP/apps.txt"
+      - name: Detect changes
+        id: detect
+        env:
+          PROBED: ${{ steps.guard.outputs.enabled }}
+        run: |
+          set -euo pipefail
+
+          # The tag is the image tag. A manual run has no tag, so it gets the commit.
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            tag="$GITHUB_REF_NAME"
+            previous="$(git describe --tags --abbrev=0 "${tag}^" 2>/dev/null || true)"
+          else
+            tag="dispatch-${GITHUB_SHA::7}"
+            previous="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+          fi
+
+          declare -A changed=([postgres]=false [authservice]=false [partner]=false [api]=false)
+          declare -A reason=()
+
+          mark() { changed[$1]=true; reason[$1]="${reason[$1]:+${reason[$1]}; }$2"; }
+
+          if [ "${DEPLOY_ALL:-false}" = true ]; then
+            for s in "${!changed[@]}"; do mark "$s" "deploy_all requested"; done
+          elif [ -z "$previous" ]; then
+            for s in "${!changed[@]}"; do mark "$s" "no previous tag: first deployment"; done
+          else
+            files="$(git diff --name-only "$previous" HEAD)"
+            has() { grep -Eq "$1" <<<"$files"; }
+
+            # Shared inputs compiled or copied into every image invalidate all of them (both Dockerfiles
+            # COPY scenarios/: scheme rules and calendars ship as data).
+            if has '^(Directory\.Build\.props|Directory\.Packages\.props|global\.json|\.dockerignore|scenarios/|src/PaymentsBench\.ServiceDefaults/)'; then
+              mark partner "shared kernel or build props changed since $previous"
+              mark api "shared kernel or build props changed since $previous"
+            fi
+            has '^(src/PaymentsBench\.(Domain|Application|Infrastructure|Api)/|flyio/api\.fly\.toml)' && mark api "API sources or config changed since $previous"
+            has '^(src/PaymentsBench\.PartnerSimulator/|flyio/partner\.fly\.toml)' && mark partner "partner simulator sources or config changed since $previous"
+            has '^flyio/authservice\.fly\.toml$' && mark authservice "authservice config changed since $previous"
+            has '^flyio/postgres\.fly\.toml$' && mark postgres "postgres config changed since $previous"
+          fi
+
+          # A service whose Fly app is missing is always selected: this is what lets a cold estate
+          # come up from one tag, and what rescues it after a teardown. Without a token the probe
+          # cannot run, so every service counts as changed (the summary says what would deploy).
+          for s in postgres authservice partner api; do
+            if [ "$PROBED" != true ]; then
+              mark "$s" "no FLY_API_TOKEN: app existence not probed, counted as changed"
+            elif ! grep -qx "payments-bench-$s" "$RUNNER_TEMP/apps.txt"; then
+              mark "$s" "Fly app payments-bench-$s does not exist"
+            fi
+          done
+
+          # Only the two services built from this repository have an image to build.
+          matrix='[]'
+          [ "${changed[partner]}" = true ] && matrix="$(jq -c '. + [{service:"partner",dockerfile:"src/PaymentsBench.PartnerSimulator/Dockerfile"}]' <<<"$matrix")"
+          [ "${changed[api]}" = true ] && matrix="$(jq -c '. + [{service:"api",dockerfile:"src/PaymentsBench.Api/Dockerfile"}]' <<<"$matrix")"
+
+          {
+            echo "tag=$tag"
+            echo "matrix=$matrix"
+            for s in postgres authservice partner api; do echo "$s=${changed[$s]}"; done
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Change detection"
+            echo
+            echo "Tag \`$tag\`, compared against \`${previous:-none}\`."
+            echo
+            echo "| Service | Deploy | Why |"
+            echo "|---|---|---|"
+            for s in postgres authservice partner api; do
+              echo "| \`payments-bench-$s\` | ${changed[$s]} | ${reason[$s]:-unchanged} |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: build (${{ matrix.service }})
+    needs: [test, detect-changes]
+    if: ${{ needs.test.result == 'success' && needs.detect-changes.outputs.matrix != '[]' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write   # the only job that may write packages; GITHUB_TOKEN is its only credential
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.detect-changes.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push, once per tag
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ env.REGISTRY_PREFIX }}-${{ matrix.service }}:${{ needs.detect-changes.outputs.tag }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,scope=${{ matrix.service }},mode=max
+      - name: Summary
+        env:
+          IMAGE: ${{ env.REGISTRY_PREFIX }}-${{ matrix.service }}:${{ needs.detect-changes.outputs.tag }}
+        run: |
+          {
+            echo "### Image pushed: \`$IMAGE\`"
+            echo
+            echo "A GHCR package is private until its visibility is set to public once (Package settings), and Fly cannot pull a private one: see docs/DEPLOYMENT.md, first-tag procedure."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy-postgres:
+    name: deploy postgres
+    needs: [test, detect-changes]
+    if: ${{ always() && !cancelled() && needs.test.result == 'success' && needs.detect-changes.outputs.postgres == 'true' }}
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      FLY_ORG: ${{ vars.FLY_ORG || 'personal' }}
+      APP: payments-bench-postgres
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for a Fly token
+        id: guard
+        run: |
+          if [ -n "${FLY_API_TOKEN:-}" ]; then echo "enabled=true" >> "$GITHUB_OUTPUT"; else echo "enabled=false" >> "$GITHUB_OUTPUT"; fi
+      - name: Summary (no FLY_API_TOKEN)
+        if: steps.guard.outputs.enabled != 'true'
+        run: |
+          {
+            echo "### Deploy \`$APP\`: skipped"
+            echo
+            echo "Would have deployed \`flyio/postgres.fly.toml\` (postgres:17-alpine, one volume, no public listener)."
+            echo "Skipped because \`FLY_API_TOKEN\` is not set in the \`production\` environment. Nothing failed."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Install flyctl
+        if: steps.guard.outputs.enabled == 'true'
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/flyctl.tgz" "https://github.com/superfly/flyctl/releases/download/v${FLYCTL_VERSION}/flyctl_${FLYCTL_VERSION}_Linux_x86_64.tar.gz"
+          echo "${FLYCTL_SHA256}  $RUNNER_TEMP/flyctl.tgz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/flyctl.tgz" -C "$RUNNER_TEMP" flyctl
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Require the root secrets
+        if: steps.guard.outputs.enabled == 'true'
+        env:
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          PAYMENTS_DB_PASSWORD: ${{ secrets.PAYMENTS_DB_PASSWORD }}
+          AUTHSERVICE_DB_PASSWORD: ${{ secrets.AUTHSERVICE_DB_PASSWORD }}
+        run: |
+          missing=0
+          for name in POSTGRES_PASSWORD PAYMENTS_DB_PASSWORD AUTHSERVICE_DB_PASSWORD; do
+            if [ -z "${!name:-}" ]; then echo "::error::secret $name is not set in the production environment"; missing=1; fi
+          done
+          exit "$missing"
+      - name: Ensure the Fly app exists
+        if: steps.guard.outputs.enabled == 'true'
+        run: |
+          if flyctl apps list --json | jq -e --arg a "$APP" '.[] | select((.Name // .name) == $a)' >/dev/null; then
+            echo "App $APP already exists."
+          else
+            flyctl apps create "$APP" --org "$FLY_ORG" --yes
+          fi
+      - name: Ensure the data volume exists
+        if: steps.guard.outputs.enabled == 'true'
+        run: |
+          if flyctl volumes list --app "$APP" --json | jq -e 'length > 0' >/dev/null; then
+            echo "A volume already exists for $APP."
+          else
+            flyctl volumes create pgdata --app "$APP" --region fra --size 3 --yes
+          fi
+      - name: Stage secrets
+        if: steps.guard.outputs.enabled == 'true'
+        env:
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          PAYMENTS_DB_PASSWORD: ${{ secrets.PAYMENTS_DB_PASSWORD }}
+          AUTHSERVICE_DB_PASSWORD: ${{ secrets.AUTHSERVICE_DB_PASSWORD }}
+        run: |
+          flyctl secrets set --app "$APP" --stage \
+            "POSTGRES_PASSWORD=$POSTGRES_PASSWORD" \
+            "PAYMENTS_DB_PASSWORD=$PAYMENTS_DB_PASSWORD" \
+            "AUTHSERVICE_DB_PASSWORD=$AUTHSERVICE_DB_PASSWORD"
+      - name: Deploy
+        if: steps.guard.outputs.enabled == 'true'
+        # --ha=false: a second machine would get a second, empty volume, not a replica.
+        # --no-public-ips: the database is reached only at <app>.internal:5432.
+        run: flyctl deploy --config flyio/postgres.fly.toml --app "$APP" --ha=false --no-public-ips --yes --wait-timeout 300
+
+  deploy-authservice:
+    name: deploy authservice
+    needs: [test, detect-changes, deploy-postgres]
+    if: >-
+      ${{ always() && !cancelled()
+          && needs.test.result == 'success'
+          && needs.detect-changes.outputs.authservice == 'true'
+          && (needs.deploy-postgres.result == 'success' || needs.deploy-postgres.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      FLY_ORG: ${{ vars.FLY_ORG || 'personal' }}
+      APP: payments-bench-authservice
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for a Fly token
+        id: guard
+        run: |
+          if [ -n "${FLY_API_TOKEN:-}" ]; then echo "enabled=true" >> "$GITHUB_OUTPUT"; else echo "enabled=false" >> "$GITHUB_OUTPUT"; fi
+      - name: Summary (no FLY_API_TOKEN)
+        if: steps.guard.outputs.enabled != 'true'
+        run: |
+          {
+            echo "### Deploy \`$APP\`: skipped"
+            echo
+            echo "Would have deployed the pinned image named in \`flyio/authservice.fly.toml\` (not built here), then checked its JWKS at \`$AUTHSERVICE_URL/.well-known/jwks.json\`."
+            echo "Skipped because \`FLY_API_TOKEN\` is not set in the \`production\` environment. Nothing failed."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Install flyctl
+        if: steps.guard.outputs.enabled == 'true'
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/flyctl.tgz" "https://github.com/superfly/flyctl/releases/download/v${FLYCTL_VERSION}/flyctl_${FLYCTL_VERSION}_Linux_x86_64.tar.gz"
+          echo "${FLYCTL_SHA256}  $RUNNER_TEMP/flyctl.tgz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/flyctl.tgz" -C "$RUNNER_TEMP" flyctl
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Require the root secrets
+        if: steps.guard.outputs.enabled == 'true'
+        env:
+          AUTHSERVICE_DB_PASSWORD: ${{ secrets.AUTHSERVICE_DB_PASSWORD }}
+          AUTH_JWT_PRIVATE_KEY_PEM: ${{ secrets.AUTH_JWT_PRIVATE_KEY_PEM }}
+        run: |
+          # A signing key is not optional: a service that booted with an ephemeral one would look
+          # healthy while invalidating every token on restart.
+          missing=0
+          for name in AUTHSERVICE_DB_PASSWORD AUTH_JWT_PRIVATE_KEY_PEM; do
+            if [ -z "${!name:-}" ]; then echo "::error::secret $name is not set in the production environment"; missing=1; fi
+          done
+          exit "$missing"
+      - name: Ensure the Fly app exists
+        if: steps.guard.outputs.enabled == 'true'
+        run: |
+          if flyctl apps list --json | jq -e --arg a "$APP" '.[] | select((.Name // .name) == $a)' >/dev/null; then
+            echo "App $APP already exists."
+          else
+            flyctl apps create "$APP" --org "$FLY_ORG" --yes
+          fi
+      - name: Stage secrets
+        if: steps.guard.outputs.enabled == 'true'
+        env:
+          AUTHSERVICE_DB_PASSWORD: ${{ secrets.AUTHSERVICE_DB_PASSWORD }}
+          AUTH_JWT_PRIVATE_KEY_PEM: ${{ secrets.AUTH_JWT_PRIVATE_KEY_PEM }}
+        run: |
+          # The connection string is derived from a password and a known host, not stored per service.
+          flyctl secrets set --app "$APP" --stage \
+            "ConnectionStrings__DefaultConnection=Host=payments-bench-postgres.internal;Port=5432;Database=authservice;Username=authservice;Password=${AUTHSERVICE_DB_PASSWORD}" \
+            "Jwt__PrivateKeyPem=${AUTH_JWT_PRIVATE_KEY_PEM}"
+      - name: Deploy the pinned image
+        if: steps.guard.outputs.enabled == 'true'
+        # The image is the [build] image in the toml: pinned there, in one place, never :latest.
+        run: flyctl deploy --config flyio/authservice.fly.toml --app "$APP" --ha=false --yes --wait-timeout 300
+      - name: JWKS check
+        if: steps.guard.outputs.enabled == 'true'
+        # The health check cannot see this: an issuer with no keys looks healthy while every
+        # downstream service rejects every token.
+        run: |
+          for attempt in $(seq 1 10); do
+            if curl -fsS "$AUTHSERVICE_URL/.well-known/jwks.json" | jq -e '(.keys | length) > 0 and all(.keys[]; .kty == "RSA")' >/dev/null \
+              && curl -fsS "$AUTHSERVICE_URL/.well-known/openid-configuration" | jq -e --arg u "$AUTHSERVICE_URL/.well-known/jwks.json" '.jwks_uri == $u' >/dev/null; then
+              echo "JWKS served with at least one RSA key; discovery points at $AUTHSERVICE_URL/.well-known/jwks.json"
+              echo "### JWKS check passed" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "attempt $attempt: JWKS not ready"
+            sleep 6
+          done
+          echo "::error::$AUTHSERVICE_URL did not serve an RSA JWKS whose discovery document points at it"
+          exit 1
+
+  deploy-partner:
+    name: deploy partner (simulated bank)
+    needs: [test, detect-changes, build, deploy-postgres, deploy-authservice]
+    if: >-
+      ${{ always() && !cancelled()
+          && needs.test.result == 'success'
+          && needs.detect-changes.outputs.partner == 'true'
+          && needs.build.result == 'success'
+          && (needs.deploy-postgres.result == 'success' || needs.deploy-postgres.result == 'skipped')
+          && (needs.deploy-authservice.result == 'success' || needs.deploy-authservice.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      FLY_ORG: ${{ vars.FLY_ORG || 'personal' }}
+      APP: payments-bench-partner
+      IMAGE: ghcr.io/konradcinkusz/payments-bench-partner:${{ needs.detect-changes.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for a Fly token
+        id: guard
+        run: |
+          if [ -n "${FLY_API_TOKEN:-}" ]; then echo "enabled=true" >> "$GITHUB_OUTPUT"; else echo "enabled=false" >> "$GITHUB_OUTPUT"; fi
+      - name: Summary (no FLY_API_TOKEN)
+        if: steps.guard.outputs.enabled != 'true'
+        run: |
+          {
+            echo "### Deploy \`$APP\`: skipped"
+            echo
+            echo "Would have deployed \`$IMAGE\` (the SIMULATED partner bank, private network only) with \`flyio/partner.fly.toml\`."
+            echo "Skipped because \`FLY_API_TOKEN\` is not set in the \`production\` environment. Nothing failed."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Install flyctl
+        if: steps.guard.outputs.enabled == 'true'
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/flyctl.tgz" "https://github.com/superfly/flyctl/releases/download/v${FLYCTL_VERSION}/flyctl_${FLYCTL_VERSION}_Linux_x86_64.tar.gz"
+          echo "${FLYCTL_SHA256}  $RUNNER_TEMP/flyctl.tgz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/flyctl.tgz" -C "$RUNNER_TEMP" flyctl
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: The image is pullable without credentials
+        if: steps.guard.outputs.enabled == 'true'
+        run: |
+          # Fly pulls from GHCR anonymously. A private package fails the deploy far less clearly.
+          docker manifest inspect "$IMAGE" >/dev/null || { echo "::error::$IMAGE is not anonymously pullable: set the GHCR package to public (docs/DEPLOYMENT.md)"; exit 1; }
+      - name: Ensure the Fly app exists
+        if: steps.guard.outputs.enabled == 'true'
+        run: |
+          if flyctl apps list --json | jq -e --arg a "$APP" '.[] | select((.Name // .name) == $a)' >/dev/null; then
+            echo "App $APP already exists."
+          else
+            flyctl apps create "$APP" --org "$FLY_ORG" --yes
+          fi
+      - name: Deploy
+        if: steps.guard.outputs.enabled == 'true'
+        # --no-public-ips: the simulated bank (and its open fault controls) is reached only over 6PN.
+        run: flyctl deploy --config flyio/partner.fly.toml --app "$APP" --image "$IMAGE" --ha=false --no-public-ips --yes --wait-timeout 300
+
+  deploy-api:
+    name: deploy api
+    needs: [test, detect-changes, build, deploy-postgres, deploy-authservice, deploy-partner]
+    if: >-
+      ${{ always() && !cancelled()
+          && needs.test.result == 'success'
+          && needs.detect-changes.outputs.api == 'true'
+          && needs.build.result == 'success'
+          && (needs.deploy-postgres.result == 'success' || needs.deploy-postgres.result == 'skipped')
+          && (needs.deploy-authservice.result == 'success' || needs.deploy-authservice.result == 'skipped')
+          && (needs.deploy-partner.result == 'success' || needs.deploy-partner.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      FLY_ORG: ${{ vars.FLY_ORG || 'personal' }}
+      APP: payments-bench-api
+      IMAGE: ghcr.io/konradcinkusz/payments-bench-api:${{ needs.detect-changes.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for a Fly token
+        id: guard
+        run: |
+          if [ -n "${FLY_API_TOKEN:-}" ]; then echo "enabled=true" >> "$GITHUB_OUTPUT"; else echo "enabled=false" >> "$GITHUB_OUTPUT"; fi
+      - name: Summary (no FLY_API_TOKEN)
+        if: steps.guard.outputs.enabled != 'true'
+        run: |
+          {
+            echo "### Deploy \`$APP\`: skipped"
+            echo
+            echo "Would have deployed \`$IMAGE\` with \`flyio/api.fly.toml\`, then checked \`$API_URL/health\` and that an unauthenticated request is refused."
+            echo "Skipped because \`FLY_API_TOKEN\` is not set in the \`production\` environment. Nothing failed."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Install flyctl
+        if: steps.guard.outputs.enabled == 'true'
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/flyctl.tgz" "https://github.com/superfly/flyctl/releases/download/v${FLYCTL_VERSION}/flyctl_${FLYCTL_VERSION}_Linux_x86_64.tar.gz"
+          echo "${FLYCTL_SHA256}  $RUNNER_TEMP/flyctl.tgz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/flyctl.tgz" -C "$RUNNER_TEMP" flyctl
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Require the root secrets
+        if: steps.guard.outputs.enabled == 'true'
+        env:
+          PAYMENTS_DB_PASSWORD: ${{ secrets.PAYMENTS_DB_PASSWORD }}
+        run: |
+          if [ -z "${PAYMENTS_DB_PASSWORD:-}" ]; then echo "::error::secret PAYMENTS_DB_PASSWORD is not set in the production environment"; exit 1; fi
+      - name: The image is pullable without credentials
+        if: steps.guard.outputs.enabled == 'true'
+        run: |
+          docker manifest inspect "$IMAGE" >/dev/null || { echo "::error::$IMAGE is not anonymously pullable: set the GHCR package to public (docs/DEPLOYMENT.md)"; exit 1; }
+      - name: Ensure the Fly app exists
+        if: steps.guard.outputs.enabled == 'true'
+        run: |
+          if flyctl apps list --json | jq -e --arg a "$APP" '.[] | select((.Name // .name) == $a)' >/dev/null; then
+            echo "App $APP already exists."
+          else
+            flyctl apps create "$APP" --org "$FLY_ORG" --yes
+          fi
+      - name: Stage secrets
+        if: steps.guard.outputs.enabled == 'true'
+        env:
+          PAYMENTS_DB_PASSWORD: ${{ secrets.PAYMENTS_DB_PASSWORD }}
+        run: |
+          flyctl secrets set --app "$APP" --stage \
+            "ConnectionStrings__payments=Host=payments-bench-postgres.internal;Port=5432;Database=payments;Username=payments;Password=${PAYMENTS_DB_PASSWORD}"
+      - name: Deploy
+        if: steps.guard.outputs.enabled == 'true'
+        run: flyctl deploy --config flyio/api.fly.toml --app "$APP" --image "$IMAGE" --ha=false --yes --wait-timeout 300
+      - name: Public checks the health check cannot make
+        if: steps.guard.outputs.enabled == 'true'
+        run: |
+          # Health is anonymous; a payment endpoint without a token must be refused. If this is 200
+          # the API is running without authentication, which is the failure to catch.
+          for attempt in $(seq 1 10); do
+            health="$(curl -s -o /dev/null -w '%{http_code}' "$API_URL/health" || true)"
+            refused="$(curl -s -o /dev/null -w '%{http_code}' "$API_URL/payments/00000000-0000-0000-0000-000000000000" || true)"
+            echo "attempt $attempt: /health=$health, unauthenticated GET /payments/{id}=$refused"
+            if [ "$health" = 200 ] && [ "$refused" = 401 ]; then
+              echo "### API checks passed: /health anonymous 200, payments refused without a token (401)" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 6
+          done
+          echo "::error::expected /health 200 and an unauthenticated payments request 401"
+          exit 1

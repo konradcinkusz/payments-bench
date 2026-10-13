@@ -7,7 +7,7 @@ namespace PaymentsBench.Infrastructure.Sweeping;
 
 /// <summary>
 /// The sweep's instruments on the shared <c>PaymentsBench</c> meter. The names are a contract with
-/// the dashboard; ADR 0010 documents the alert on the gauge. The meter comes from
+/// the dashboard; ADR 0011 documents the alert on the gauge. The meter comes from
 /// <see cref="IMeterFactory"/>, which hands every caller the same instance for a name.
 /// </summary>
 public sealed class SweepMetrics
