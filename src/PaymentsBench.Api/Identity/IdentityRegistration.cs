@@ -28,7 +28,7 @@ internal static class IdentityRegistration
         if (string.IsNullOrWhiteSpace(authority))
         {
             // Deliberately not P8 "degrade" outside Development: a deployed payment API without
-            // authentication is open, not degraded (ADR 0004).
+            // authentication is open, not degraded (ADR 0007).
             if (!builder.Environment.IsDevelopment())
             {
                 throw new InvalidOperationException(

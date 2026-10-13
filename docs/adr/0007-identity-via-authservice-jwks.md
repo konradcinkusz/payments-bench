@@ -1,4 +1,4 @@
-# ADR 0004: Identity via authservice JWKS; anonymous only in Development
+# ADR 0007: Identity via authservice JWKS; anonymous only in Development
 
 **Status:** accepted, 2026-10-13
 
@@ -46,6 +46,7 @@ the point, and it is made visible at the warning level on every start.
 ## Consequences
 
 - Every client, including the notification sender, needs a token from authservice (R11).
+- The deploy slice sets `ASPNETCORE_ENVIRONMENT=Production` on Fly, so a missing authority there fails the deploy loudly.
 - The Development policy is a property of the environment name. A deployment that sets
   `ASPNETCORE_ENVIRONMENT=Development` is open; the deployment slice must not do that.
 - Key rotation is authservice's concern; the API picks up a new JWKS through its metadata refresh.

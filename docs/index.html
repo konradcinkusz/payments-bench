@@ -273,8 +273,8 @@ figure.fig figcaption { font-size: 13.5px; color: var(--muted); padding: 6px 4px
 <div class="stat"><span class="big-num">6</span><p>payment states, every allowed move in one table</p><span class="src">src/PaymentsBench.Domain/Payments/PaymentTransitions.cs</span></div>
 <div class="stat"><span class="big-num">3</span><p>ledger accounts</p><span class="src">src/PaymentsBench.Domain/Ledger/LedgerAccounts.cs</span></div>
 <div class="stat"><span class="big-num">7</span><p>fault scenarios, as data</p><span class="src">scenarios/*.yaml</span></div>
-<div class="stat"><span class="big-num">10</span><p>open rows in the register of what is not proved</p><span class="src">docs/REGISTER.md</span></div>
-<div class="stat"><span class="big-num">6</span><p>decision records</p><span class="src">docs/adr/</span></div>
+<div class="stat"><span class="big-num">11</span><p>open rows in the register of what is not proved</p><span class="src">docs/REGISTER.md</span></div>
+<div class="stat"><span class="big-num">7</span><p>decision records</p><span class="src">docs/adr/</span></div>
 </div>
 
 <div class="cards cards-3">
@@ -546,8 +546,9 @@ figure.fig figcaption { font-size: 13.5px; color: var(--muted); padding: 6px 4px
 <tr><th scope="row" class="mono">R8</th><td class="mono nowrap">2026-10-13</td><td><strong>The resolver is called, never scheduled.</strong> <code>POST /payments/{id}/resolve</code> exists; nothing sweeps Submitted payments older than N seconds on its own.</td><td>A background sweep with a metric on the age of the oldest Submitted payment, and an alert threshold documented.</td></tr>
 <tr><th scope="row" class="mono">R9</th><td class="mono nowrap">2026-10-13</td><td><strong>No load, no chaos.</strong> Nothing has measured throughput, and the simulator&#39;s faults are set by hand, not injected randomly under load.</td><td>A k6 or equivalent run with the simulator cycling fault profiles, and numbers in this file.</td></tr>
 <tr><th scope="row" class="mono">R10</th><td class="mono nowrap">2026-10-13</td><td><strong>Sanctions, AML, limits: absent.</strong> The service moves any amount to any account.</td><td>Out of scope for the bench; stays open as a statement of scope.</td></tr>
+<tr><th scope="row" class="mono">R11</th><td class="mono nowrap">2026-10-13</td><td><strong>The partner webhook is authenticated with a bearer token, not a partner signature.</strong> <code>/partner/notifications</code> falls under the API&#39;s fallback policy, so the sender needs a token from authservice; a real partner would sign the payload (HMAC) or present a client certificate (mTLS), and nothing here verifies either.</td><td>Partner notifications are verified by a partner-held key (signature or mTLS) and a test rejects an unsigned one.</td></tr>
 </tbody></table></div>
-<p class="src">docs/REGISTER.md · 10 open rows</p>
+<p class="src">docs/REGISTER.md · 11 open rows</p>
 <h3>Closed</h3>
 <p class="note"><strong>Closed rows:</strong> None yet.</p>
 </section>
@@ -595,6 +596,7 @@ node scripts/site-build.mjs --check   # exits 1 if the committed page is stale</
 <li><a href="https://github.com/konradcinkusz/payments-bench/blob/main/docs/adr/0004-the-overview-pdf-is-built-on-demand.md">ADR 0004: The overview PDF is built on demand, on pull requests touching its sources, and on tags</a> <span class="muted">decision record</span></li>
 <li><a href="https://github.com/konradcinkusz/payments-bench/blob/main/docs/adr/0005-the-documentation-site-is-generated.md">ADR 0005: The documentation site is generated, not hand-maintained</a> <span class="muted">decision record</span></li>
 <li><a href="https://github.com/konradcinkusz/payments-bench/blob/main/docs/adr/0006-the-site-loads-no-external-resource.md">ADR 0006: The site loads no external resource</a> <span class="muted">decision record</span></li>
+<li><a href="https://github.com/konradcinkusz/payments-bench/blob/main/docs/adr/0007-identity-via-authservice-jwks.md">ADR 0007: Identity via authservice JWKS; anonymous only in Development</a> <span class="muted">decision record</span></li>
 <li><a href="https://github.com/konradcinkusz/payments-bench">The GitHub repository</a></li>
 </ul>
 <p class="note">A PDF edition of the overview is built by the “Build Overview PDF” workflow (<code>.github/workflows/build-overview-pdf.yml</code>).</p>

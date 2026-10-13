@@ -32,7 +32,7 @@ Each figure names the file it was measured in; the measurements were taken on `m
 
 | | | |
 |---|---|---|
-| **The tests** | 37 · 15 + 22 | `dotnet test`: 15 in `tests/PaymentsBench.Domain.Tests`, 22 in `tests/PaymentsBench.Application.Tests`, on the in-memory stores, no database. |
+| **The tests** | 49 · 15 + 22 + 12 | `dotnet test`: 15 in `tests/PaymentsBench.Domain.Tests`, 22 in `tests/PaymentsBench.Application.Tests`, 12 in `tests/PaymentsBench.Api.Tests`, on the in-memory stores, no database. |
 | **The scenarios** | 7 files · 4 classes | [`scenarios/`](scenarios/) holds seven scenario files in the classes `happy`, `partner-failure`, `duplicate` and `reconciliation`. They are a specification; none is executed yet (R3). |
 | **The register** | 10 open rows | [`docs/REGISTER.md`](docs/REGISTER.md): R1 to R10, none closed. |
 | **The findings** | 5 | [`docs/FINDINGS.md`](docs/FINDINGS.md): F-1 and F-2 fixed, F-3 to F-5 open. |
@@ -93,7 +93,7 @@ curl localhost:5100/payments/<id>/ledger
 ## What is built, and what has never run
 
 Built, tested and on `main`: the domain, the application handlers, the in-memory and EF Core
-stores, the HTTP surface, the partner simulator with switchable faults, and the 37 tests above.
+stores, the HTTP surface, the partner simulator with switchable faults, and the 49 tests above.
 
 Never run, recorded in [`docs/REGISTER.md`](docs/REGISTER.md) rather than in a footnote:
 
