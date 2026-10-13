@@ -5,8 +5,10 @@ namespace PaymentsBench.Application.Payments;
 /// <summary>Resolve up to <paramref name="BatchSize"/> payments that have sat at Submitted for at least <paramref name="MinimumAge"/>.</summary>
 public sealed record SweepSubmittedPayments(TimeSpan MinimumAge, int BatchSize);
 
+/// <summary>A payment whose resolve threw during a sweep, and the exception.</summary>
 public sealed record SweepFailure(Guid PaymentId, Exception Exception);
 
+/// <summary>What one sweep did: how many payments it selected, how each resolved, which failed, and how old the oldest Submitted payment is afterwards.</summary>
 /// <param name="Examined">How many payments the batch selected.</param>
 /// <param name="Outcomes">Resolutions by <see cref="ResolutionOutcome"/> name; failures are not in here.</param>
 /// <param name="Failures">Payments whose resolve threw, with the exception.</param>
