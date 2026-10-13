@@ -54,7 +54,7 @@ decides: R3, R6, R8, R5, R2.
 
 ## Slices
 
-### A1 - persistence: migrations and PostgreSQL integration tests (R4) - PR: _pending_
+### A1 - persistence: migrations and PostgreSQL integration tests (R4) - PR: [#13](https://github.com/konradcinkusz/payments-bench/pull/13)
 
 Principle: P4 (migrated, never ensured; migrations in a hosted service after Kestrel starts),
 P13 (integration tier against a real container), SERVICE-API-PATTERNS.md §7 (migration gate).
@@ -72,7 +72,7 @@ Tests: the integration project above; existing 37 stay green. Register: R4 moves
 citing the test classes and the CI job. ADR: schema migrated by a hosted service behind a gate.
 README Run section: how `dotnet test` finds a database.
 
-### A2 - api-surface: manifest, validation, problem details, pagination - PR: _pending_
+### A2 - api-surface: manifest, validation, problem details, pagination - PR: [#10](https://github.com/konradcinkusz/payments-bench/pull/10)
 
 Principle: P9 (Program.cs is a manifest), SERVICE-API-PATTERNS.md §3 (validation) and §4
 (pagination and list queries), P11 (no persistence or framework type in a response).
@@ -88,7 +88,7 @@ Principle: P9 (Program.cs is a manifest), SERVICE-API-PATTERNS.md §3 (validatio
 Out of scope: authentication (stream B). The EF `ListAsync` gets its integration test in A4 if
 A1 has not landed when A2 merges.
 
-### A3 - calendars: business calendars as data (R7) - PR: _pending_
+### A3 - calendars: business calendars as data (R7) - PR: [#11](https://github.com/konradcinkusz/payments-bench/pull/11)
 
 Principle: architecture rule 7 (scheme rules are data), P10 (a calendar is an interface plus
 registration), P8 (scheme data is required; malformed data stops start-up with the file named).
@@ -103,7 +103,7 @@ registration), P8 (scheme data is required; malformed data stops start-up with t
 Register: R7 moves to _Closed_. ADR: calendars as dated, covered data. A new row is opened if the
 computed value date is still not stamped on the payment.
 
-### A4 - concurrency: one of two writers loses (R6) - PR: _pending_
+### A4 - concurrency: one of two writers loses (R6) - PR: [#22](https://github.com/konradcinkusz/payments-bench/pull/22)
 
 Principle: P13; architecture "Persistence" (`Version` is a concurrency token); P11 (no EF type
 crosses into Application or Api).
@@ -117,7 +117,7 @@ crosses into Application or Api).
 
 Register: R6 moves to _Closed_.
 
-### A5 - sweeper: Submitted payments resolve themselves (R8) - PR: _pending_
+### A5 - sweeper: Submitted payments resolve themselves (R8) - PR: [#21](https://github.com/konradcinkusz/payments-bench/pull/21)
 
 Principle: ADR 0001 consequence (a payment can sit at Submitted until something resolves it),
 P5 (configuration through the environment), P15 (the new path has metrics, traces and logs),
@@ -132,7 +132,7 @@ SERVICE-API-PATTERNS.md §6-§7.
 
 Register: R8 moves to _Closed_.
 
-### A6 - scenario-runner: every scenario file executes (R3) - PR: _pending_
+### A6 - scenario-runner: every scenario file executes (R3) - PR: [#23](https://github.com/konradcinkusz/payments-bench/pull/23)
 
 Principle: P13 (a suite is evidence only if it is wired to CI), architecture rule 7 (scenarios
 are data; a new file is a new case with no code change).
@@ -147,7 +147,7 @@ are data; a new file is a new case with no code change).
 
 Register: R3 moves to _Closed_. ADR: the scenario runner runs in process.
 
-### A7 - outbox-contract: at-least-once, deduped by the consumer (R5, narrowed) - PR: _pending_
+### A7 - outbox-contract: at-least-once, deduped by the consumer (R5, narrowed) - PR: [#20](https://github.com/konradcinkusz/payments-bench/pull/20)
 
 Principle: architecture rule 5, P10 (a publisher is an interface plus one registration),
 reference architecture §4 (no event bus until a use case needs one).
@@ -161,7 +161,7 @@ reference architecture §4 (no event bus until a use case needs one).
 Register: R5 is narrowed, not closed: no broker has carried an event. ADR: a broker is a
 one-class swap, and what that class must honour.
 
-### A8 - iso20022: anti-corruption edge (R2) - PR: _pending_
+### A8 - iso20022: anti-corruption edge (R2) - PR: [#24](https://github.com/konradcinkusz/payments-bench/pull/24)
 
 Principle: P11 (external dialects are normalized at the boundary, once).
 
@@ -182,11 +182,28 @@ B), sanctions and limits (R10), authentication, Dockerfiles, deployment and the 
 
 ## Progress
 
-- [ ] A1 persistence (R4)
-- [ ] A2 api-surface
-- [ ] A3 calendars (R7)
-- [ ] A4 concurrency (R6)
-- [ ] A5 sweeper (R8)
-- [ ] A6 scenario-runner (R3)
-- [ ] A7 outbox-contract (R5 narrowed)
-- [ ] A8 iso20022 (R2)
+- [x] A1 persistence (R4) - #13: R4 closed; R12 opened (Testcontainers path not run, concurrent migration untested); ADR 0008
+- [x] A2 api-surface - #10: manifest, problem details, validation, paged list; ADR 0009; site generator sums every `tests.*` key
+- [x] A3 calendars (R7) - #11: R7 closed; R11 opened (value date not stamped on the payment); ADR 0007
+- [x] A4 concurrency (R6) - #22: R6 closed; R19 opened (concurrent duplicate initiate returns 409); ADR 0013
+- [x] A5 sweeper (R8) - #21: R8 closed, stream B's R16 (resolve 500 on open circuit) closed, fixes F-3; R17 opened (sweep proved in process only); ADR 0011
+- [x] A6 scenario-runner (R3) - #23: R3 closed, fixes F-4 and F-5; R18 opened (a return has no statement line of its own); ADR 0012
+- [x] A7 outbox-contract (R5 narrowed) - #20: R5 narrowed, not closed (no broker); ADR 0010
+- [x] A8 iso20022 (R2) - #24: R2 closed; R20 opened (samples hand-written, not XSD-validated, gateway still JSON); ADR 0014
+
+## Findings
+
+What the slices caught on the way, for `docs/FINDINGS.md`. Each one is fixed unless it says otherwise.
+
+| Finding | Caught by | Outcome |
+|---|---|---|
+| `EfPaymentRepository.UpdateAsync` re-read the row and used that version as the original value, so a writer that lost a race overwrote the winner instead of failing | A4, reading the code behind R6 | Fixed in #22: the version read is the version checked; `ConcurrencyTests` races two writers |
+| The resolver answered `SafeToResubmit` after a resubmit whose own outcome was unknown (F-3) | Stream C, `OVERVIEW.md` | Fixed in #21: `StillUnknown` |
+| `resolve` answered 500 while the partner circuit was open, the recovery path failing exactly when needed (stream B's R16) | Stream B, k6 run | Fixed in #21: `PartnerStatus.Unavailable`, never treated as not-found |
+| A settled-then-returned payment showed as an `OnStatementOnly` break on its settlement day (F-4) | Stream C, `OVERVIEW.md` | Fixed in #23; the return day itself is R18 |
+| The GET-only retry predicate never matched an exception, so a status lookup that threw was not retried (F-5) | Stream C, `OVERVIEW.md` | Fixed in #23: the method is read from the request |
+| Container images failed to publish once scheme data became required: the Dockerfiles copied `src/` only | A3, Containers workflow | Fixed in #11: the Dockerfiles copy `scenarios/` |
+| `WebApplicationFactory.ConfigureAppConfiguration` applies too late for settings read while services are built: the runner's partner timeouts silently stayed at their defaults and a timeout scenario passed for the wrong reason | A6, a scenario that should have failed | Fixed in #23: `UseSetting`; recorded in ADR 0012 |
+| New register rows appended below the prose that follows the open table rendered outside it, twice | Stream lead review of #23 and #24 | Fixed in both; stream C added a site-build check (#27) |
+| CodeQL test-hygiene notes on the integration tests (an undisposed `CancellationTokenSource`, an unused assignment) | CodeQL on #13 | Open; not blocking, left for a hygiene pass |
+
