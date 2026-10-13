@@ -61,7 +61,7 @@ public static class InfrastructureRegistration
             services.AddScoped<IOutbox, EfOutbox>();
             services.AddScoped<IInbox, EfInbox>();
             services.AddScoped<IUnitOfWork, EfUnitOfWork>();
-            services.AddSingleton<IEventPublisher, LoggingEventPublisher>();
+            services.AddOutboxPublisher(configuration);
             services.AddSingleton<MigrationGate>();
             services.AddHostedService<MigrationHostedService>();
             services.AddHostedService<OutboxDispatcher>();

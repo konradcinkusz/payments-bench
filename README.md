@@ -41,7 +41,7 @@ Each figure names the file it was measured in; the measurements were taken on `m
 ## Run it
 
 ```bash
-dotnet test                                   # 98 tests; the 26 integration tests need PostgreSQL (see below)
+dotnet test                                   # 114 tests; the 30 integration tests need PostgreSQL (see below)
 dotnet run --project src/PaymentsBench.AppHost   # Aspire: PostgreSQL + simulator + API + dashboard
 ```
 
