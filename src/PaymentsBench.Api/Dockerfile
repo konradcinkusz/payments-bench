@@ -5,7 +5,7 @@
 #
 # Layer order: solution-wide props and project files first and restored, source after,
 # so a code change does not invalidate the restore layer.
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:11.0 AS build
 WORKDIR /src
 COPY global.json Directory.Build.props Directory.Packages.props ./
 COPY src/PaymentsBench.Domain/PaymentsBench.Domain.csproj src/PaymentsBench.Domain/
