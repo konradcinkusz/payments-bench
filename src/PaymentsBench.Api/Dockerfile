@@ -23,7 +23,7 @@ COPY scenarios/ scenarios/
 RUN dotnet publish src/PaymentsBench.Api/PaymentsBench.Api.csproj --configuration Release --no-restore -p:TreatWarningsAsErrors=false --output /app/publish
 
 # Runtime image major version equals the TFM major version (net10.0).
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:11.0 AS final
 LABEL org.opencontainers.image.source=https://github.com/konradcinkusz/payments-bench
 
 # The aspnet image has no curl and the HEALTHCHECK needs an HTTP client. curl is installed
